@@ -1,0 +1,21 @@
+[package]
+name = "pinguer_cli"
+description = "The `pinguer` command-line interface"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[[bin]]
+name = "pinguer"
+path = "src/main.rs"
+
+[dependencies]
+pinguer_source.workspace = true
+pinguer_diagnostics.workspace = true
+pinguer_lexer.workspace = true
+
+[lints]
+workspace = true
