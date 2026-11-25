@@ -1,0 +1,30 @@
+[workspace]
+resolver = "3"
+members = [
+    "compiler/source",
+]
+
+[workspace.package]
+version = "0.1.0-dev"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/Peixotou/pinguer"
+authors = ["The Pinguer Project Developers"]
+
+[workspace.lints.rust]
+# Unsafe code is forbidden workspace-wide. A crate that genuinely needs it must
+# override this lint locally and document every invariant (see ADR-0002).
+unsafe_code = "forbid"
+missing_docs = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+
+[profile.release]
+debug = "line-tables-only"
