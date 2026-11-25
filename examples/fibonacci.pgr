@@ -1,0 +1,35 @@
+// Recursive and iterative Fibonacci, using only v0.1 features.
+import std.io
+
+const LIMIT = 20
+
+func fibRecursive(n: int) -> int {
+    if n < 2 {
+        return n
+    }
+    return fibRecursive(n - 1) + fibRecursive(n - 2)
+}
+
+func fibIterative(n: int) -> int {
+    var previous = 0
+    var current = 1
+    var i = 0
+    while i < n {
+        let next = previous + current
+        previous = current
+        current = next
+        i += 1
+    }
+    return previous
+}
+
+func main() {
+    var n = 0
+    while n <= LIMIT {
+        io.print(n)
+        io.print(": ")
+        io.println(fibIterative(n))
+        n += 1
+    }
+    io.println(fibRecursive(LIMIT) == fibIterative(LIMIT))
+}

@@ -1,0 +1,6 @@
+// The smallest Pinguer program.
+import std.io
+
+func main() {
+    io.println("Hello, Pinguer!")
+}
