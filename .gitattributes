@@ -1,0 +1,5 @@
+# Keep LF line endings in the working tree on every platform. Tests compare
+# exact compiler output (token text, columns), which depends on line endings.
+* text=auto eol=lf
+
+*.png binary
