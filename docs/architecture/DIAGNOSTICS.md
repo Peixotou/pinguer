@@ -1,0 +1,114 @@
+# Diagnostics
+
+Implementation: `compiler/diagnostics` (crate `pinguer_diagnostics`).
+Decision record: [ADR-0008](../adr/0008-diagnostic-codes-and-formats.md).
+
+## 1. Data model
+
+```rust
+pub struct Diagnostic {
+    pub severity: Severity,        // Error | Warning | Note
+    pub code: Option<Code>,        // e.g. P1002
+    pub message: String,           // one-line summary
+    pub labels: Vec<Label>,        // spans with Primary or Secondary style
+    pub notes: Vec<String>,        // "= note: ..."
+    pub help: Vec<String>,         // "= help: ..."
+}
+```
+
+Stages push diagnostics into a `Diagnostics` collection and continue. The
+first primary label determines the location in the header.
+
+## 2. Writing good diagnostics
+
+* **Message:** lowercase, no trailing period, states the problem
+  (`unterminated string literal`), not the fix.
+* **Primary label:** points at the exact offending text and says what is wrong
+  *there* (`missing closing "`).
+* **Secondary labels:** point at related code that explains the problem
+  (for example, the declaration a type comes from).
+* **Notes:** background or rules (`string literals cannot contain line
+  breaks`).
+* **Help:** an action the user can take. A help message may claim that a
+  change is correct only when the compiler knows it is; otherwise phrase it as
+  a possibility.
+* Every diagnostic about the program being compiled (its files and source
+  text) has a code and a test. The only current exception is `P0003` (file
+  too large), whose trigger requires a 4 GiB input. Command-line usage errors
+  and "command not available" messages concern the invocation, not the
+  program, and have no code.
+
+## 3. Human format
+
+```text
+error[P1002]: unterminated string literal
+ --> lexical_errors.pgr:2:19
+  |
+2 |     let message = "unterminated
+  |                   ^^^^^^^^^^^^^ missing closing `"`
+  |
+  = note: string literals cannot contain line breaks; use `\n` instead
+```
+
+Rules implemented by the renderer:
+
+* Lines and columns are 1-based; columns count Unicode scalar values.
+* Labels on the same line are shown in column order, one marker row each.
+* Labels in other files get their own ` ::: file:line:col` section.
+* A label spanning several lines is underlined to the end of its first line.
+* Tabs are expanded to four spaces. Control characters, bidirectional
+  formatting characters and invisible formatting characters in source lines,
+  messages and file names are shown as `<U+XXXX>`, so diagnostics cannot
+  reorder or hide text in a terminal.
+* Output is never colored (yet).
+
+Known limitation: wide characters (CJK, most emoji) are assumed to occupy one
+terminal cell, so markers after them can be misaligned.
+
+## 4. JSON format
+
+Selected with `--diagnostic-format json`. Each diagnostic is one JSON object
+on its own line, written to standard error.
+
+```json
+{"format_version":1,"severity":"error","code":"P1002","message":"unterminated string literal","labels":[{"file":"main.pgr","byte_start":14,"byte_end":20,"line_start":1,"column_start":15,"line_end":1,"column_end":21,"style":"primary","message":"missing closing `\"`"}],"notes":["string literals cannot contain line breaks; use `\\n` instead"],"help":[]}
+```
+
+| Field | Type | Meaning |
+|---|---|---|
+| `format_version` | integer | Schema version, currently `1`. |
+| `severity` | `"error"` \| `"warning"` \| `"note"` | |
+| `code` | string or `null` | Diagnostic code. |
+| `message` | string | Summary. |
+| `labels[].file` | string | File name as given to the compiler. |
+| `labels[].byte_start`, `byte_end` | integer | Byte offsets (end exclusive). |
+| `labels[].line_start`, `column_start` | integer | 1-based start position. |
+| `labels[].line_end`, `column_end` | integer | 1-based position just past the end. |
+| `labels[].style` | `"primary"` \| `"secondary"` | |
+| `labels[].message` | string | Label text, possibly empty. |
+| `notes`, `help` | array of strings | |
+
+Within `format_version` 1, fields may be added but never removed or changed.
+Strings escape all control characters as well as U+2028 and U+2029.
+
+## 5. Code registry
+
+| Range | Stage | Allocated codes |
+|---|---|---|
+| P0001–P0999 | Driver, files | P0001–P0003 |
+| P1001–P1999 | Lexical analysis | P1001–P1011 |
+| P2001–P2999 | Syntax | — |
+| P3001–P3999 | Name resolution | — |
+| P4001–P4999 | Types | — |
+| P5001–P5999 | Memory and ownership | — |
+| P6001–P6999 | Code generation, linking | — |
+| P9001–P9999 | Internal compiler errors | — |
+
+The authoritative list, with summaries, is `pinguer_diagnostics::codes::REGISTRY`.
+
+## 6. Planned
+
+* `pinguer explain P1002` printing a long-form explanation for each code.
+* Warning levels and lint configuration (`allow`, `warn`, `deny`).
+* Colored output when the terminal supports it.
+* An error limit and deduplication of cascading errors.
