@@ -1,0 +1,249 @@
+(*
+  Pinguer grammar — language version 0.1 (draft)
+
+  Status: Normative (v0.1), except for the section "Future productions",
+  which is non-normative and records proposals only.
+  Implementation: not started (the parser is the next milestone).
+
+  Notation: ISO/IEC 14977 EBNF.
+    =   definition          ,   concatenation      ;   end of rule
+    |   alternative         [ ] optional           { } zero or more
+    " " terminal string     (* *) comment
+
+  Terminals written in quotes are the tokens of LEXICAL_STRUCTURE.md.
+  The following token classes are defined there:
+
+    IDENT    INT_LITERAL    FLOAT_LITERAL    STRING_LITERAL    CHAR_LITERAL
+    NEWLINE  EOF
+
+  Newline handling
+
+  The lexer emits NEWLINE only where a line break may be significant (never
+  inside parentheses or brackets). In addition, the parser IGNORES a NEWLINE
+  token that immediately follows any of these tokens:
+
+    binary operators   "||" "&&" "==" "!=" "<" "<=" ">" ">=" "|" "^" "&"
+                       "<<" ">>" "+" "-" "*" "/" "%"
+    assignment         "=" "+=" "-=" "*=" "/=" "%=" "&=" "|=" "^=" "<<=" ">>="
+    other              "as" "->" ","
+    planned            "**" "|>" "??" "**=" (once those operators exist)
+
+  The parser also IGNORES a NEWLINE token that is immediately FOLLOWED by
+  "." (ADR-0014), so that a line starting with "." continues the previous
+  line. When the planned operators exist, the same applies to a NEWLINE
+  followed by "?." "|>" or "??". None of these tokens can begin a statement.
+
+  Every other NEWLINE is part of the grammar below, where it acts as a
+  statement or item separator.
+
+  Layout rules enforced by the grammar:
+    - "{" must be on the same line as the construct that introduces it;
+    - "else" must be on the same line as the preceding "}".
+*)
+
+(* Files and items *)
+
+File            = { Separator } ,
+                  [ Item , { Separator , { Separator } , Item } , { Separator } ] ,
+                  EOF ;
+
+Separator       = NEWLINE | ";" ;
+
+Item            = ImportDecl
+                | FuncDecl
+                | ConstDecl ;
+
+ImportDecl      = "import" , ModulePath ;
+
+ModulePath      = IDENT , { "." , IDENT } ;
+
+FuncDecl        = "func" , IDENT , "(" , [ ParamList ] , ")" ,
+                  [ "->" , Type ] , Block ;
+
+ParamList       = Param , { "," , Param } , [ "," ] ;
+
+Param           = IDENT , ":" , Type ;
+
+ConstDecl       = "const" , IDENT , [ ":" , Type ] , "=" , Expr ;
+
+(* Types *)
+
+(* In v0.1 every named type is a built-in type such as int or string. *)
+Type            = IDENT
+                | UnitType ;
+
+UnitType        = "(" , ")" ;
+
+(* Blocks and statements *)
+
+Block           = "{" , { Separator } ,
+                  [ Statement , { Separator , { Separator } , Statement } , { Separator } ] ,
+                  "}" ;
+
+Statement       = LetDecl
+                | VarDecl
+                | ConstDecl
+                | Assignment
+                | ExprStatement
+                | IfStatement
+                | WhileStatement
+                | ReturnStatement
+                | "break"
+                | "continue"
+                | Block ;
+
+LetDecl         = "let" , IDENT , [ ":" , Type ] , "=" , Expr ;
+
+VarDecl         = "var" , IDENT , [ ":" , Type ] , "=" , Expr ;
+
+(* Only variables can be assigned in v0.1. *)
+Assignment      = IDENT , AssignOp , Expr ;
+
+AssignOp        = "=" | "+=" | "-=" | "*=" | "/=" | "%="
+                | "&=" | "|=" | "^=" | "<<=" | ">>=" ;
+
+(* Semantic restriction: the outermost operation of an expression
+   statement must be a call. Other expressions are rejected. *)
+ExprStatement   = PostfixExpr ;
+
+IfStatement     = "if" , Expr , Block , [ "else" , ( IfStatement | Block ) ] ;
+
+WhileStatement  = "while" , Expr , Block ;
+
+(* "return" followed by NEWLINE, ";" or "}" returns no value. *)
+ReturnStatement = "return" , [ Expr ] ;
+
+(* Expressions, from lowest to highest precedence *)
+
+Expr            = OrExpr ;
+
+OrExpr          = AndExpr , { "||" , AndExpr } ;
+
+AndExpr         = CompareExpr , { "&&" , CompareExpr } ;
+
+(* Comparisons are non-associative: at most one comparison operator. *)
+CompareExpr     = BitOrExpr , [ CompareOp , BitOrExpr ] ;
+
+CompareOp       = "==" | "!=" | "<" | "<=" | ">" | ">=" ;
+
+BitOrExpr       = BitXorExpr , { "|" , BitXorExpr } ;
+
+BitXorExpr      = BitAndExpr , { "^" , BitAndExpr } ;
+
+BitAndExpr      = ShiftExpr , { "&" , ShiftExpr } ;
+
+ShiftExpr       = AddExpr , { ( "<<" | ">>" ) , AddExpr } ;
+
+AddExpr         = MulExpr , { ( "+" | "-" ) , MulExpr } ;
+
+MulExpr         = CastExpr , { ( "*" | "/" | "%" ) , CastExpr } ;
+
+CastExpr        = UnaryExpr , { "as" , Type } ;
+
+UnaryExpr       = ( "-" | "!" | "~" ) , UnaryExpr
+                | PostfixExpr ;
+
+PostfixExpr     = PrimaryExpr , { CallSuffix | MemberSuffix } ;
+
+CallSuffix      = "(" , [ ArgList ] , ")" ;
+
+ArgList         = Expr , { "," , Expr } , [ "," ] ;
+
+(* In v0.1, member access is only valid on an imported module name. *)
+MemberSuffix    = "." , IDENT ;
+
+PrimaryExpr     = INT_LITERAL
+                | FLOAT_LITERAL
+                | STRING_LITERAL
+                | CHAR_LITERAL
+                | "true"
+                | "false"
+                | IDENT
+                | "(" , Expr , ")" ;
+
+(* Future productions (non-normative). These sketches record the syntax
+   currently proposed in the specification documents. They are not part of
+   v0.1 and may change. *)
+
+(*
+  -- Expressions with the planned operators (see OPERATORS.md). These rules
+  -- replace the v0.1 expression rules; the relative order of v0.1
+  -- operators is unchanged.
+
+  Expr            = OrExpr ;
+  OrExpr          = AndExpr , { "||" , AndExpr } ;
+  AndExpr         = CompareExpr , { "&&" , CompareExpr } ;
+  CompareExpr     = CoalesceExpr , [ CompareOp , CoalesceExpr ] ;
+  CoalesceExpr    = PipeExpr , [ "??" , CoalesceExpr ] ;          (* right *)
+  PipeExpr        = BitOrExpr , { "|>" , PipeTarget } ;
+  PipeTarget      = PostfixExpr ;   (* semantic restriction: a function
+                                       name, path, or call of one *)
+  BitOrExpr       = BitXorExpr , { "|" , BitXorExpr } ;
+  (* BitXorExpr, BitAndExpr, ShiftExpr, AddExpr, MulExpr, CastExpr as in v0.1 *)
+  UnaryExpr       = ( "-" | "!" | "~" | "try" ) , UnaryExpr
+                  | PowerExpr ;
+  (* "await" would join this list if the concurrency model adopts it
+     (Proposal). *)
+
+  -- Expression statements (planned extension of the v0.1 rule)
+  ExprStatement   = PostfixExpr
+                  | "try" , PostfixExpr
+                  | PipeExpr ;
+  (* Semantic restriction: the statement must perform a call: the outermost
+     operation of the PostfixExpr is a call, and a PipeExpr always is. *)
+  PowerExpr       = PostfixExpr , [ "**" , UnaryExpr ] ;           (* right *)
+  PostfixExpr     = PrimaryExpr ,
+                    { CallSuffix | MemberSuffix | OptMemberSuffix | IndexSuffix } ;
+  OptMemberSuffix = "?." , IDENT ;
+  IndexSuffix     = "[" , Expr , "]" ;
+  AssignOp        = (* v0.1 operators *) | "**=" ;
+
+  -- Types
+  OptionalType    = Type , "?" ;   (* "T??" arrives as one "??" token and is
+                                      split by the parser *)
+
+  -- Visibility (ADR-0012)
+  Visibility      = "public" | "private" ;
+  (* An item, struct field or method may be preceded by one Visibility. *)
+
+  -- Attributes (ADR-0020); NEWLINE after an attribute is ignored
+  Attribute       = "@" , IDENT , [ "(" , [ AttrArgs ] , ")" ] ;
+  AttrArgs        = AttrArg , { "," , AttrArg } , [ "," ] ;
+  AttrArg         = [ IDENT , ":" ] , Expr ;   (* e.g. @target(os: "linux") *)
+
+  -- Queries (ADR-0015, Experimental). Words in angle quotes are contextual
+  -- keywords: lexically IDENT, recognised only in these positions.
+  QueryExpr       = <query> , "{" , { Separator } ,
+                    FromClause , { Separator , { Separator } , QueryClause } ,
+                    { Separator } , "}" ;
+  FromClause      = <from> , IDENT , "in" , Expr ;
+  QueryClause     = WhereClause | OrderClause | SelectClause ;
+  WhereClause     = "where" , Expr ;
+  OrderClause     = <order> , <by> , OrderKey , { "," , OrderKey } ;
+  OrderKey        = Expr , [ <ascending> | <descending> ] ;
+  SelectClause    = <select> , Expr , { "," , Expr } ;
+  (* Semantic restrictions: exactly one SelectClause, and it is the last
+     clause. *)
+
+  StructDecl      = "struct" , IDENT , [ GenericParams ] , "{" ,
+                    { Separator } , { FieldDecl , { Separator } } , "}" ;
+  FieldDecl       = IDENT , ":" , Type ;
+
+  EnumDecl        = "enum" , IDENT , [ GenericParams ] , "{" ,
+                    { Separator } , { Variant , { Separator } } , "}" ;
+  Variant         = IDENT , [ "(" , Type , { "," , Type } , ")" ] ;
+
+  GenericParams   = "<" , GenericParam , { "," , GenericParam } , ">" ;
+  GenericParam    = IDENT , [ ":" , Constraint ] ;
+  GenericType     = IDENT , "<" , Type , { "," , Type } , ">" ;
+
+  MatchExpr       = "match" , Expr , "{" , { Separator } ,
+                    { MatchArm , { Separator } } , "}" ;
+  MatchArm        = Pattern , "=>" , ( Expr | Block ) ;
+
+  AsyncFuncDecl   = "async" , FuncDecl ;
+  AwaitExpr       = "await" , UnaryExpr ;
+
+  UnsafeBlock     = "unsafe" , Block ;
+  ForStatement    = "for" , Pattern , "in" , Expr , Block ;
+*)
