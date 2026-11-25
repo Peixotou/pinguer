@@ -1,0 +1,16 @@
+[package]
+name = "pinguer_lexer"
+description = "Pinguer compiler: lexer component"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+pinguer_source.workspace = true
+pinguer_diagnostics.workspace = true

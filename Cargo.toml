@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "compiler/source",
     "compiler/diagnostics",
+    "compiler/lexer",
 ]
 
 [workspace.package]
@@ -14,6 +15,7 @@ authors = ["The Pinguer Project Developers"]
 
 [workspace.dependencies]
 pinguer_source = { path = "compiler/source", version = "0.1.0-dev" }
+pinguer_diagnostics = { path = "compiler/diagnostics", version = "0.1.0-dev" }
 
 [workspace.lints.rust]
 # Unsafe code is forbidden workspace-wide. A crate that genuinely needs it must
