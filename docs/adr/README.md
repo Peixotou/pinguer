@@ -36,6 +36,7 @@ supersedes an earlier one.
 | [0027](0027-parser-architecture.md) | Parser architecture | Accepted |
 | [0028](0028-ast-representation.md) | AST representation | Accepted |
 | [0029](0029-parser-error-recovery.md) | Parser error recovery | Accepted |
+| [0030](0030-parser-resource-limits.md) | Parser resource limits | Accepted |
 
 ## Template
 
