@@ -50,6 +50,21 @@ pub enum ExprKind {
         /// The target type.
         ty: Type,
     },
+    /// A call, `callee(args)`.
+    Call {
+        /// The called expression.
+        callee: Box<Expr>,
+        /// The arguments, in order.
+        args: Vec<Expr>,
+    },
+    /// A member access, `base.name`. In v0.1 the base must be a module
+    /// name; name resolution checks that.
+    Member {
+        /// The expression before the `.`.
+        base: Box<Expr>,
+        /// The name after the `.`.
+        name: Ident,
+    },
     /// An expression that could not be parsed. A diagnostic has been
     /// reported, by the lexer or the parser.
     Error,
