@@ -426,13 +426,14 @@ impl SourceMap {
     /// [`SourceMap::load`] with a configurable size limit, so that tests can
     /// reach the limit without gigabytes of input.
     fn load_with_limit(&mut self, path: &Path, limit: usize) -> Result<FileId, SourceError> {
-        // Opening or reading a directory fails differently on each system;
-        // both failures are reported as `IsDirectory`.
+        // Opening or reading a directory fails differently on each system,
+        // and on Windows also depends on the spelling of the path (`dir\`
+        // gives "path not found"); every such failure on a path that names
+        // a directory is reported as `IsDirectory`.
         let classify = |error: SourceError| match error {
             SourceError::Io(error)
                 if error.kind() == io::ErrorKind::IsADirectory
-                    || (error.kind() == io::ErrorKind::PermissionDenied
-                        && fs::metadata(path).is_ok_and(|metadata| metadata.is_dir())) =>
+                    || fs::metadata(path).is_ok_and(|metadata| metadata.is_dir()) =>
             {
                 SourceError::IsDirectory(error)
             }
@@ -800,9 +801,16 @@ mod tests {
     #[test]
     fn load_reports_directories_on_every_system() {
         let dir = TempFile::new("directory", b"");
-        let error = SourceMap::new().load(&dir.dir).unwrap_err();
-        assert!(matches!(error, SourceError::IsDirectory(_)), "{error:?}");
-        assert_eq!(error.to_string(), "is a directory, not a file");
-        assert!(std::error::Error::source(&error).is_some());
+        // With and without a trailing separator, which Windows reports as
+        // "path not found" rather than "access denied".
+        for path in [dir.dir.clone(), dir.dir.join("")] {
+            let error = SourceMap::new().load(&path).unwrap_err();
+            assert!(
+                matches!(error, SourceError::IsDirectory(_)),
+                "{path:?}: {error:?}"
+            );
+            assert_eq!(error.to_string(), "is a directory, not a file");
+            assert!(std::error::Error::source(&error).is_some());
+        }
     }
 }
