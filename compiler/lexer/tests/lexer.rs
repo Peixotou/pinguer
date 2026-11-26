@@ -795,6 +795,81 @@ fn bidirectional_escape_in_string_is_allowed() {
     lex(r#""\u{202E}""#).assert_clean();
 }
 
+/// Vertical tab, form feed, next line, line separator, paragraph separator,
+/// NUL, escape, delete and a C1 control (CSI).
+const FORBIDDEN_CONTROLS: [char; 9] = [
+    '\u{B}', '\u{C}', '\u{85}', '\u{2028}', '\u{2029}', '\u{0}', '\u{1B}', '\u{7F}', '\u{9B}',
+];
+
+#[test]
+fn control_characters_and_line_separators_are_rejected_everywhere() {
+    for c in FORBIDDEN_CONTROLS {
+        for source in [
+            format!("a {c} b"),
+            format!("// comment {c} text\na"),
+            format!("/* {c} */ a"),
+            format!("\"text {c} more\""),
+            format!("'{c}'"),
+        ] {
+            let lexed = lex(&source);
+            assert_eq!(lexed.codes(), ["P1012"], "{source:?}");
+            assert_eq!(lexed.labelled(), [c.to_string()], "{source:?}");
+        }
+    }
+}
+
+#[test]
+fn line_separator_cannot_hide_code_in_a_comment() {
+    // An editor that breaks the line at U+2028 shows `return grant()` as
+    // code; the compiler reads it as part of the comment.
+    let lexed = lex("func f() {\n    // check access\u{2028}return grant()\n}");
+    assert_eq!(lexed.codes(), ["P1012"]);
+    assert!(!lexed.kinds().contains(&kw(Keyword::Return)));
+    let diagnostic = &lexed.diagnostics[0];
+    assert_eq!(diagnostic.message, "line separator U+2028 in source");
+    assert!(diagnostic.labels[0].message.contains("line break"));
+    assert_eq!(
+        diagnostic.help,
+        ["inside a string or character literal, write the character as the escape `\\u{2028}`"]
+    );
+}
+
+#[test]
+fn other_control_characters_are_described_as_invisible() {
+    let lexed = lex("// \u{1B}[2K");
+    assert_eq!(lexed.codes(), ["P1012"]);
+    assert_eq!(
+        lexed.diagnostics[0].message,
+        "control character U+001B in source"
+    );
+    assert!(lexed.diagnostics[0].labels[0].message.contains("terminal"));
+}
+
+#[test]
+fn escapes_may_produce_forbidden_characters() {
+    lex(r#""\u{2028}\u{2029}\u{B}\u{C}\u{85}\u{1B}\u{7F}\0" '\u{B}'"#).assert_clean();
+}
+
+#[test]
+fn tab_is_allowed_in_comments_and_literals() {
+    lex("\"a\tb\" '\t' // c\td\n/* e\tf */").assert_clean();
+}
+
+#[test]
+fn forbidden_control_in_code_is_one_unknown_token_and_one_diagnostic() {
+    let lexed = lex("a\u{C}b");
+    assert_eq!(lexed.codes(), ["P1012"]);
+    assert_eq!(lexed.kinds(), vec![T::Ident, T::Unknown, T::Ident]);
+    assert_eq!(lexed.pairs()[1], (T::Unknown, "\u{C}"));
+}
+
+#[test]
+fn backslash_before_forbidden_control_is_not_an_escape() {
+    let lexed = lex("\"a\\\u{B}b\"");
+    assert_eq!(lexed.codes(), ["P1012"]);
+    assert_eq!(lexed.kinds(), vec![T::String]);
+}
+
 #[test]
 fn lone_carriage_return_is_rejected() {
     let lexed = lex("a\rb");

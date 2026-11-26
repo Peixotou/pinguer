@@ -109,6 +109,9 @@ define_codes! {
     LONE_CARRIAGE_RETURN = 1010, "carriage return not followed by a line feed";
     /// An identifier containing non-ASCII characters.
     NON_ASCII_IDENTIFIER = 1011, "non-ASCII identifiers are not supported";
+    /// A control character other than tab and line breaks, or U+2028 or
+    /// U+2029, written directly in source text.
+    FORBIDDEN_CONTROL_CHARACTER = 1012, "control character or Unicode line separator in source";
 }
 
 #[cfg(test)]

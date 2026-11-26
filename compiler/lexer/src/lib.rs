@@ -25,7 +25,9 @@
 //!   `\u{X}` with one to six hexadecimal digits.
 //! * Unicode bidirectional formatting characters are rejected everywhere,
 //!   including inside comments and literals, to prevent "Trojan Source"
-//!   attacks (CVE-2021-42574).
+//!   attacks (CVE-2021-42574). So are control characters other than tab and
+//!   line breaks, and U+2028 and U+2029, which other tools may show as line
+//!   breaks or interpret (ADR-0024). Escapes can still produce all of them.
 //!
 //! # Line breaks and statement termination
 //!
@@ -107,6 +109,28 @@ fn is_text_flow_control(c: char) -> bool {
         c,
         '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
     )
+}
+
+/// Control characters other than tab and the line break characters, and the
+/// Unicode line and paragraph separators. They are rejected anywhere in
+/// source code because other tools show some of them as line breaks and
+/// interpret others (ADR-0024).
+fn is_forbidden_control(c: char) -> bool {
+    (c.is_control() && !matches!(c, '\t' | '\n' | '\r')) || matches!(c, '\u{2028}' | '\u{2029}')
+}
+
+/// The name used in diagnostics for a character accepted by
+/// [`is_forbidden_control`], and whether other tools may treat it as a line
+/// break.
+fn forbidden_control_name(c: char) -> (&'static str, bool) {
+    match c {
+        '\u{B}' => ("vertical tab", true),
+        '\u{C}' => ("form feed", true),
+        '\u{85}' => ("next line character", true),
+        '\u{2028}' => ("line separator", true),
+        '\u{2029}' => ("paragraph separator", true),
+        _ => ("control character", false),
+    }
 }
 
 fn is_ident_continue(c: char) -> bool {
@@ -275,8 +299,8 @@ impl Lexer<'_> {
         }
     }
 
-    /// Reports every bidirectional formatting character and lone carriage
-    /// return in the file, wherever it appears.
+    /// Reports every bidirectional formatting character, forbidden control
+    /// character and lone carriage return in the file, wherever it appears.
     fn check_text_flow(&mut self) {
         let bytes = self.text.as_bytes();
         for (index, c) in self.text.char_indices() {
@@ -293,6 +317,30 @@ impl Lexer<'_> {
                     .with_help(format!(
                         "inside a string or character literal, write the character as the escape `\\u{{{code_point:X}}}`"
                     )),
+                );
+            } else if is_forbidden_control(c) {
+                let span = self.span(index, index + c.len_utf8());
+                let code_point = u32::from(c);
+                let (name, line_break_look_alike) = forbidden_control_name(c);
+                let (label, note) = if line_break_look_alike {
+                    (
+                        "other tools may display this character as a line break; the compiler does not",
+                        "only a line feed, or a carriage return followed by a line feed, ends a line",
+                    )
+                } else {
+                    (
+                        "this invisible character can change how a terminal displays the code",
+                        "control characters other than tab and line breaks are not allowed in source text",
+                    )
+                };
+                self.report(
+                    Diagnostic::error(format!("{name} U+{code_point:04X} in source"))
+                        .with_code(codes::FORBIDDEN_CONTROL_CHARACTER)
+                        .with_primary(span, label)
+                        .with_note(note)
+                        .with_help(format!(
+                            "inside a string or character literal, write the character as the escape `\\u{{{code_point:X}}}`"
+                        )),
                 );
             } else if c == '\r' && bytes.get(index + 1) != Some(&b'\n') {
                 let span = self.span(index, index + 1);
@@ -335,6 +383,12 @@ impl Lexer<'_> {
                 c if is_text_flow_control(c) => {
                     // Reported by `check_text_flow`.
                     self.bump();
+                }
+                c if is_forbidden_control(c) => {
+                    // Reported by `check_text_flow`; an `Unknown` token keeps
+                    // the place of the rejected character.
+                    self.bump();
+                    self.push(TokenKind::Unknown, start, self.pos);
                 }
                 _ => self.punctuation_or_unknown(),
             }
@@ -560,9 +614,10 @@ impl Lexer<'_> {
                 self.unicode_escape(start);
             }
             _ if self.at_line_end() => {}
-            // A lone carriage return is reported by `check_text_flow`; it is
-            // not an escape sequence and is left for the caller to consume.
-            Some('\r') => {}
+            // A lone carriage return or a forbidden control character is
+            // reported by `check_text_flow`; it is not an escape sequence and
+            // is left for the caller to consume.
+            Some(c) if c == '\r' || is_forbidden_control(c) => {}
             Some(c) => {
                 self.bump();
                 let span = self.span(start, self.pos);

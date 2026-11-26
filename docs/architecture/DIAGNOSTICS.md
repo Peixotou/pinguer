@@ -108,7 +108,7 @@ Strings escape all control characters as well as U+2028 and U+2029.
 | Range | Stage | Allocated codes |
 |---|---|---|
 | P0001–P0999 | Driver, files | P0001–P0004 |
-| P1001–P1999 | Lexical analysis | P1001–P1011 |
+| P1001–P1999 | Lexical analysis | P1001–P1012 |
 | P2001–P2999 | Syntax | — |
 | P3001–P3999 | Name resolution | — |
 | P4001–P4999 | Types | — |
