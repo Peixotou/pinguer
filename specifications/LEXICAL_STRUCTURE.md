@@ -160,13 +160,19 @@ tokens for them; the parser recognises them by position.
 
 | Words | Special only | Status |
 |---|---|---|
-| `query` | directly before `{` where an expression is expected | Experimental ([ADR-0015](../docs/adr/0015-contextual-query-keywords.md)) |
+| `query` | directly before `{` where an expression is expected, except directly in the condition of `if` or `while` or the scrutinee of `match` | Experimental ([ADR-0015](../docs/adr/0015-contextual-query-keywords.md)) |
 | `from`, `order`, `select` | at the start of a clause inside a query | Experimental |
 | `by` | directly after `order` in a query | Experimental |
 | `ascending`, `descending` | after an `order by` key | Experimental |
 
 Contextual keywords exist so that rarely used syntax does not take common
 names (`order`, `select`) away from every program.
+
+In the condition of `if` or `while` and the scrutinee of `match`, the `{`
+after the expression opens the statement's block, so `if query { … }` is the
+identifier `query` followed by a block, never a query. A query in those
+positions is written in parentheses
+([FUNCTIONAL_PROGRAMMING.md §4.2](FUNCTIONAL_PROGRAMMING.md#42-query-expressions-experimental)).
 
 ### 5.3 Integer literals
 
