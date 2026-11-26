@@ -26,6 +26,7 @@ use std::path::Path;
 pub const MAX_FILE_SIZE: usize = u32::MAX as usize;
 
 const BYTE_ORDER_MARK: char = '\u{FEFF}';
+const BYTE_ORDER_MARK_UTF8: &[u8] = b"\xEF\xBB\xBF";
 
 /// Distance in bytes between two entries of [`SourceFile::char_checkpoints`].
 ///
@@ -347,31 +348,42 @@ impl SourceMap {
         if text.starts_with(BYTE_ORDER_MARK) {
             text.drain(..BYTE_ORDER_MARK.len_utf8());
         }
-        if text.len() > MAX_FILE_SIZE {
-            return Err(SourceError::TooLarge { size: text.len() });
-        }
-        let id = u32::try_from(self.files.len()).expect("more than u32::MAX source files");
-        self.files.push(SourceFile::new(name.into(), text));
-        Ok(FileId(id))
+        self.insert(name.into(), text)
     }
 
     /// Reads a file from disk, validates that it is UTF-8 and registers it.
     ///
-    /// The file's display name is the path exactly as given.
+    /// The file's display name is the path exactly as given. A leading UTF-8
+    /// byte order mark is removed before validation, so the offset reported
+    /// for invalid UTF-8 is relative to the text after it, like every other
+    /// offset.
     ///
     /// # Errors
     ///
     /// Returns an error if the file cannot be read, is not valid UTF-8 or is
     /// larger than [`MAX_FILE_SIZE`].
     pub fn load(&mut self, path: &Path) -> Result<FileId, SourceError> {
-        let bytes = std::fs::read(path).map_err(SourceError::Io)?;
+        let mut bytes = std::fs::read(path).map_err(SourceError::Io)?;
+        if bytes.starts_with(BYTE_ORDER_MARK_UTF8) {
+            bytes.drain(..BYTE_ORDER_MARK_UTF8.len());
+        }
         if bytes.len() > MAX_FILE_SIZE {
             return Err(SourceError::TooLarge { size: bytes.len() });
         }
         let text = String::from_utf8(bytes).map_err(|error| SourceError::InvalidUtf8 {
             offset: error.utf8_error().valid_up_to(),
         })?;
-        self.add(path.display().to_string(), text)
+        self.insert(path.display().to_string(), text)
+    }
+
+    /// Registers text whose byte order mark, if any, was already removed.
+    fn insert(&mut self, name: String, text: String) -> Result<FileId, SourceError> {
+        if text.len() > MAX_FILE_SIZE {
+            return Err(SourceError::TooLarge { size: text.len() });
+        }
+        let id = u32::try_from(self.files.len()).expect("more than u32::MAX source files");
+        self.files.push(SourceFile::new(name, text));
+        Ok(FileId(id))
     }
 
     /// Returns the file identified by `id`.
@@ -569,6 +581,51 @@ mod tests {
         let error = map.load(&path).unwrap_err();
         std::fs::remove_dir_all(&dir).unwrap();
         assert!(matches!(error, SourceError::InvalidUtf8 { offset: 2 }));
+    }
+
+    /// A file in a temporary directory unique to one test, removed when
+    /// dropped.
+    struct TempFile {
+        dir: std::path::PathBuf,
+        path: std::path::PathBuf,
+    }
+
+    impl TempFile {
+        fn new(test: &str, contents: &[u8]) -> Self {
+            let dir =
+                std::env::temp_dir().join(format!("pinguer-source-{test}-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            let path = dir.join("file.pgr");
+            std::fs::write(&path, contents).unwrap();
+            Self { dir, path }
+        }
+    }
+
+    impl Drop for TempFile {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    #[test]
+    fn invalid_utf8_offset_is_relative_to_the_text_after_the_byte_order_mark() {
+        let file = TempFile::new("bom-invalid", b"\xEF\xBB\xBFok\xFFrest");
+        let error = SourceMap::new().load(&file.path).unwrap_err();
+        // The offset in the file is 5; in the text after the mark it is 2.
+        assert!(
+            matches!(error, SourceError::InvalidUtf8 { offset: 2 }),
+            "{error:?}"
+        );
+    }
+
+    #[test]
+    fn load_removes_one_byte_order_mark_like_add() {
+        let file = TempFile::new("bom-twice", "\u{FEFF}\u{FEFF}x".as_bytes());
+        let mut map = SourceMap::new();
+        let loaded = map.load(&file.path).unwrap();
+        let added = map.add("added.pgr", "\u{FEFF}\u{FEFF}x").unwrap();
+        assert_eq!(map.file(loaded).text(), "\u{FEFF}x");
+        assert_eq!(map.file(loaded).text(), map.file(added).text());
     }
 
     #[test]

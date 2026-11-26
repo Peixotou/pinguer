@@ -424,3 +424,15 @@ fn invalid_utf8_is_reported() {
     assert!(text.contains("invalid byte at offset 12"), "{text}");
     assert!(text.contains("must be encoded in UTF-8"), "{text}");
 }
+
+#[test]
+fn invalid_utf8_offset_excludes_the_byte_order_mark() {
+    let dir = TempDir::new("bom-invalid-utf8");
+    let path = dir.file("bom.pgr", b"\xEF\xBB\xBFlet s = \"caf\xE9\"\n");
+    let output = pinguer(&["debug", "tokens", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    let text = stderr(&output);
+    assert!(text.starts_with("error[P0002]: cannot load `"), "{text}");
+    // The same offset as without the mark, as LEXICAL_STRUCTURE.md §1 requires.
+    assert!(text.contains("invalid byte at offset 12"), "{text}");
+}
