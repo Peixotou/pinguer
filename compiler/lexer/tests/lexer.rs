@@ -993,6 +993,20 @@ fn backslash_before_forbidden_control_is_not_an_escape() {
 }
 
 #[test]
+fn backslash_before_bidirectional_character_is_not_an_escape() {
+    // Reported once, like every other rejected character, and not also as
+    // an unknown escape.
+    let lexed = lex("\"a\\\u{202E}b\"");
+    assert_eq!(lexed.codes(), ["P1009"]);
+    assert_eq!(lexed.kinds(), vec![T::String]);
+    // In a character literal the backslash that starts no escape still
+    // counts as a character, as before a lone carriage return.
+    let lexed = lex("'\\\u{2066}'");
+    assert_eq!(lexed.codes(), ["P1008", "P1009"]);
+    assert_eq!(lexed.kinds(), vec![T::Char]);
+}
+
+#[test]
 fn lone_carriage_return_is_rejected() {
     let lexed = lex("a\rb");
     assert_eq!(lexed.codes(), ["P1010"]);

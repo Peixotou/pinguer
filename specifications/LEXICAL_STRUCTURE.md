@@ -37,9 +37,10 @@ The characters of this section are rejected anywhere in a source file,
 including inside comments, string literals and character literals. The rule
 applies to characters written directly in the file: a literal that needs one
 of them writes it as an escape sequence (section 5.5), and characters produced
-by escapes are not restricted. Outside comments and literals, each forbidden
-character is reported once, with the code given below, and produces one
-`Unknown` token.
+by escapes are not restricted. Each forbidden character is reported once,
+with the code given below, also directly after a backslash in a literal,
+where it does not start an escape sequence. Outside comments and literals it
+also produces one `Unknown` token.
 
 ### 3.1 Bidirectional formatting characters
 

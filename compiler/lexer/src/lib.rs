@@ -620,10 +620,11 @@ impl Lexer<'_> {
                 self.unicode_escape(start, quote);
             }
             _ if self.at_line_end() => {}
-            // A lone carriage return or a forbidden control character is
-            // reported by `check_text_flow`; it is not an escape sequence and
-            // is left for the caller to consume.
-            Some(c) if c == '\r' || is_forbidden_control(c) => {}
+            // A lone carriage return, a bidirectional formatting character
+            // or a forbidden control character is reported by
+            // `check_text_flow`; it is not an escape sequence and is left for
+            // the caller to consume.
+            Some(c) if c == '\r' || is_text_flow_control(c) || is_forbidden_control(c) => {}
             Some(c) => {
                 self.bump();
                 let span = self.span(start, self.pos);
