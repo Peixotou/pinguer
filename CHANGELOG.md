@@ -29,3 +29,35 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 - Unit, integration, property-style and end-to-end tests.
 - GitHub Actions CI for Linux, Windows and macOS.
 - Project logo.
+- ADR-0024: control characters other than tab and line breaks, and
+  U+2028 and U+2029, are rejected anywhere in source text (`P1012`).
+  ADR-0025 (proposed) records the options for string interpolation (C6);
+  ADR-0026 (proposed) the requirements for locating and invoking `clang`.
+- A limit of 100 reported diagnostics per invocation; further diagnostics
+  are counted and summarized by a `P0004` note in both formats.
+- Scalability tests with inputs of up to 2 MB and a front-end benchmark
+  (`cargo bench -p pinguer_cli --bench scalability`).
+
+### Fixed
+
+- Line and column lookup, and therefore `debug tokens`, took time
+  proportional to the square of the line length; it no longer depends on
+  the line length.
+- Diagnostics repeated the whole source line: excerpts now show at most 120
+  cells around the labels, and the CLI streams its output instead of
+  building it in memory.
+- Arguments that are not valid Unicode made the CLI panic; they are now
+  accepted as file names and are usage errors elsewhere.
+- Command-line errors ignored `--diagnostic-format json`.
+- File errors embedded the operating system's localized message in the
+  English diagnostic, and a directory was reported as "permission denied"
+  on Windows.
+- Source files were read completely before their size was checked.
+- The `P0002` offset in a file with a byte order mark counted the mark.
+- A lone carriage return at the end of a file was cut from excerpts.
+- `\u{12G4}` was reported as an unterminated escape; uppercase numeric
+  prefixes such as `0XFF` as an invalid suffix; a bidirectional character or
+  lone carriage return outside literals produced no token.
+- Several invisible characters (soft hyphen, variation selectors, tag
+  characters and others) were printed verbatim in diagnostics, and escaping
+  a character outside the Basic Multilingual Plane produced invalid JSON.

@@ -14,6 +14,22 @@ done only when its criteria are met and CI is green. Dates are not promised.
 * CLI scaffolding: `help`, `version`, `debug tokens`.
 * Tests (unit, integration, property-style, end-to-end) and CI.
 
+### Phase 01.5 — Compiler hardening
+
+* Linear-time line and column lookup; bounded diagnostic excerpts, a
+  diagnostic limit and streamed CLI output.
+* Bounded reading of source files; arguments that are not valid Unicode;
+  command-line errors in the requested diagnostic format; English file
+  errors that keep the operating system's message.
+* Lexical rules for control characters and Unicode line separators
+  (ADR-0024); precise diagnostics for Unicode escapes and numeric prefixes;
+  `Unknown` tokens for every rejected character outside literals.
+* Specification consistency fixes; decision records for string
+  interpolation (ADR-0025) and `clang` discovery (ADR-0026).
+* **Done when:** every fix has regression tests, doubling the input size
+  roughly doubles the time of every front-end phase up to 10 MB, diagnostic
+  output is bounded, and CI is green on all three platforms.
+
 ### Phase 02 — Parser and AST
 
 * AST with node IDs and spans; parser for the full v0.1 grammar.
