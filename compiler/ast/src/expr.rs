@@ -2,7 +2,7 @@
 
 use pinguer_source::Span;
 
-use crate::{Ident, NodeId};
+use crate::{Ident, NodeId, Type};
 
 /// An expression.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -25,9 +25,157 @@ pub enum ExprKind {
     /// An expression in parentheses. Kept because the negative-literal rule
     /// and diagnostics depend on whether parentheses were written.
     Paren(Box<Expr>),
+    /// A prefix operator applied to an operand, such as `-x`.
+    Unary {
+        /// The operator.
+        op: UnaryOp,
+        /// The operand.
+        operand: Box<Expr>,
+    },
+    /// A binary operator applied to two operands, such as `a + b`.
+    Binary {
+        /// The operator.
+        op: BinaryOp,
+        /// Where the operator was written.
+        op_span: Span,
+        /// The left operand.
+        left: Box<Expr>,
+        /// The right operand.
+        right: Box<Expr>,
+    },
+    /// An explicit conversion, `operand as ty`.
+    Cast {
+        /// The value converted.
+        operand: Box<Expr>,
+        /// The target type.
+        ty: Type,
+    },
     /// An expression that could not be parsed. A diagnostic has been
     /// reported, by the lexer or the parser.
     Error,
+}
+
+/// A prefix operator.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum UnaryOp {
+    /// `-`, arithmetic negation.
+    Neg,
+    /// `!`, logical not.
+    Not,
+    /// `~`, bitwise not.
+    BitNot,
+}
+
+impl UnaryOp {
+    /// Returns the operator's spelling.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            UnaryOp::Neg => "-",
+            UnaryOp::Not => "!",
+            UnaryOp::BitNot => "~",
+        }
+    }
+}
+
+/// A binary operator of v0.1.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BinaryOp {
+    /// `*`
+    Mul,
+    /// `/`
+    Div,
+    /// `%`
+    Rem,
+    /// `+`
+    Add,
+    /// `-`
+    Sub,
+    /// `<<`
+    Shl,
+    /// `>>`
+    Shr,
+    /// `&`
+    BitAnd,
+    /// `^`
+    BitXor,
+    /// `|`
+    BitOr,
+    /// `==`
+    Eq,
+    /// `!=`
+    Ne,
+    /// `<`
+    Lt,
+    /// `<=`
+    Le,
+    /// `>`
+    Gt,
+    /// `>=`
+    Ge,
+    /// `&&`, which evaluates its right operand only if the left is `true`.
+    And,
+    /// `||`, which evaluates its right operand only if the left is `false`.
+    Or,
+}
+
+impl BinaryOp {
+    /// Every binary operator, from the highest precedence level to the
+    /// lowest.
+    pub const ALL: &'static [BinaryOp] = &[
+        BinaryOp::Mul,
+        BinaryOp::Div,
+        BinaryOp::Rem,
+        BinaryOp::Add,
+        BinaryOp::Sub,
+        BinaryOp::Shl,
+        BinaryOp::Shr,
+        BinaryOp::BitAnd,
+        BinaryOp::BitXor,
+        BinaryOp::BitOr,
+        BinaryOp::Eq,
+        BinaryOp::Ne,
+        BinaryOp::Lt,
+        BinaryOp::Le,
+        BinaryOp::Gt,
+        BinaryOp::Ge,
+        BinaryOp::And,
+        BinaryOp::Or,
+    ];
+
+    /// Returns the operator's spelling.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            BinaryOp::Mul => "*",
+            BinaryOp::Div => "/",
+            BinaryOp::Rem => "%",
+            BinaryOp::Add => "+",
+            BinaryOp::Sub => "-",
+            BinaryOp::Shl => "<<",
+            BinaryOp::Shr => ">>",
+            BinaryOp::BitAnd => "&",
+            BinaryOp::BitXor => "^",
+            BinaryOp::BitOr => "|",
+            BinaryOp::Eq => "==",
+            BinaryOp::Ne => "!=",
+            BinaryOp::Lt => "<",
+            BinaryOp::Le => "<=",
+            BinaryOp::Gt => ">",
+            BinaryOp::Ge => ">=",
+            BinaryOp::And => "&&",
+            BinaryOp::Or => "||",
+        }
+    }
+
+    /// Returns `true` for `==`, `!=`, `<`, `<=`, `>` and `>=`.
+    #[must_use]
+    pub fn is_comparison(self) -> bool {
+        matches!(
+            self,
+            BinaryOp::Eq | BinaryOp::Ne | BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge
+        )
+    }
 }
 
 /// A literal, decoded from its token.
@@ -82,6 +230,26 @@ impl Base {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn operator_spellings_are_distinct() {
+        let mut spellings: Vec<&str> = BinaryOp::ALL.iter().map(|op| op.as_str()).collect();
+        assert_eq!(spellings.len(), 18);
+        spellings.sort_unstable();
+        spellings.dedup();
+        assert_eq!(spellings.len(), 18);
+        let comparisons: Vec<&str> = BinaryOp::ALL
+            .iter()
+            .filter(|op| op.is_comparison())
+            .map(|op| op.as_str())
+            .collect();
+        assert_eq!(comparisons, ["==", "!=", "<", "<=", ">", ">="]);
+        let unary: Vec<&str> = [UnaryOp::Neg, UnaryOp::Not, UnaryOp::BitNot]
+            .into_iter()
+            .map(UnaryOp::as_str)
+            .collect();
+        assert_eq!(unary, ["-", "!", "~"]);
+    }
 
     #[test]
     fn bases_report_their_radix() {
