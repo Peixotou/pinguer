@@ -324,16 +324,27 @@ fn debug_tokens(args: &[OsString], output: &mut Output) -> u8 {
     }
 }
 
+/// Describes a file that could not be loaded. The message is the compiler's
+/// own English text; an error reported by the operating system, whose text
+/// may be localized, is quoted unchanged in a note, together with its code.
 fn load_error(path: &Path, error: &SourceError) -> Diagnostic {
     let code = match error {
-        SourceError::Io(_) => codes::CANNOT_READ_FILE,
+        SourceError::Io(_) | SourceError::IsDirectory(_) => codes::CANNOT_READ_FILE,
         SourceError::InvalidUtf8 { .. } => codes::INVALID_UTF8,
         SourceError::TooLarge { .. } => codes::FILE_TOO_LARGE,
     };
     let mut diagnostic =
         Diagnostic::error(format!("cannot load `{}`: {error}", path.display())).with_code(code);
-    if matches!(error, SourceError::InvalidUtf8 { .. }) {
-        diagnostic = diagnostic.with_note("Pinguer source files must be encoded in UTF-8");
+    match error {
+        SourceError::Io(os_error) | SourceError::IsDirectory(os_error)
+            if os_error.raw_os_error().is_some() =>
+        {
+            diagnostic = diagnostic.with_note(format!("the operating system reported: {os_error}"));
+        }
+        SourceError::InvalidUtf8 { .. } => {
+            diagnostic = diagnostic.with_note("Pinguer source files must be encoded in UTF-8");
+        }
+        _ => {}
     }
     diagnostic
 }

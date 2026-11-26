@@ -482,10 +482,38 @@ fn missing_file_is_reported() {
     let output = pinguer(&["debug", "tokens", "does-not-exist.pgr"]);
     assert_eq!(output.status.code(), Some(1));
     let text = stderr(&output);
+    // The message is the compiler's English text; the operating system's
+    // message, which may be localized, is quoted in a note with its code
+    // (2 is ENOENT on Unix and ERROR_FILE_NOT_FOUND on Windows).
     assert!(
-        text.starts_with("error[P0001]: cannot load `does-not-exist.pgr`: "),
+        text.starts_with(
+            "error[P0001]: cannot load `does-not-exist.pgr`: file not found\n  \
+             = note: the operating system reported: "
+        ),
         "{text}"
     );
+    assert!(text.contains("(os error 2)\n"), "{text}");
+}
+
+#[test]
+fn directory_is_reported_as_a_directory() {
+    let dir = TempDir::new("directory-input");
+    let output = pinguer(&["debug", "tokens", dir.0.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    let text = stderr(&output);
+    let first = text.lines().next().unwrap();
+    assert!(
+        first.starts_with("error[P0001]: cannot load `")
+            && first.ends_with("`: is a directory, not a file"),
+        "{text}"
+    );
+    // Windows refuses to open a directory, Linux and macOS refuse to read
+    // one; either way the original error is kept.
+    assert!(
+        text.contains("= note: the operating system reported: "),
+        "{text}"
+    );
+    assert!(text.contains("(os error "), "{text}");
 }
 
 #[test]

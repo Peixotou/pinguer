@@ -28,7 +28,10 @@ suppressed diagnostics, which renderers print after the retained ones.
 ## 2. Writing good diagnostics
 
 * **Message:** lowercase, no trailing period, states the problem
-  (`unterminated string literal`), not the fix.
+  (`unterminated string literal`), not the fix. Messages are the compiler's
+  own English text. Text produced by the operating system, which may be
+  localized, is never part of a message: it is quoted unchanged, with its
+  error code, in a note (`the operating system reported: ... (os error 5)`).
 * **Primary label:** points at the exact offending text and says what is wrong
   *there* (`missing closing "`).
 * **Secondary labels:** point at related code that explains the problem

@@ -309,10 +309,19 @@ fn read_bounded(
 }
 
 /// An error produced while registering or loading a source file.
+///
+/// The `Display` text is the compiler's own English description. The
+/// operating system's error, whose message may be localized, is kept
+/// unchanged in the variants that wrap an [`io::Error`] and is returned by
+/// [`std::error::Error::source`].
 #[derive(Debug)]
 pub enum SourceError {
-    /// The file could not be read.
+    /// The file could not be opened or read.
     Io(io::Error),
+    /// The path names a directory. Holds the error the operating system
+    /// reported for the attempt to read it, which differs between systems:
+    /// Windows refuses to open a directory, Linux refuses to read one.
+    IsDirectory(io::Error),
     /// The file is not valid UTF-8.
     InvalidUtf8 {
         /// Byte offset of the first invalid byte sequence in the file.
@@ -330,7 +339,13 @@ pub enum SourceError {
 impl fmt::Display for SourceError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SourceError::Io(error) => write!(f, "{error}"),
+            SourceError::Io(error) => match error.kind() {
+                io::ErrorKind::NotFound => f.write_str("file not found"),
+                io::ErrorKind::PermissionDenied => f.write_str("permission denied"),
+                // The standard library's fixed English description.
+                kind => write!(f, "{kind}"),
+            },
+            SourceError::IsDirectory(_) => f.write_str("is a directory, not a file"),
             SourceError::InvalidUtf8 { offset } => {
                 write!(
                     f,
@@ -351,7 +366,7 @@ impl fmt::Display for SourceError {
 impl std::error::Error for SourceError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            SourceError::Io(error) => Some(error),
+            SourceError::Io(error) | SourceError::IsDirectory(error) => Some(error),
             SourceError::InvalidUtf8 { .. } | SourceError::TooLarge { .. } => None,
         }
     }
@@ -411,7 +426,19 @@ impl SourceMap {
     /// [`SourceMap::load`] with a configurable size limit, so that tests can
     /// reach the limit without gigabytes of input.
     fn load_with_limit(&mut self, path: &Path, limit: usize) -> Result<FileId, SourceError> {
-        let file = File::open(path).map_err(SourceError::Io)?;
+        // Opening or reading a directory fails differently on each system;
+        // both failures are reported as `IsDirectory`.
+        let classify = |error: SourceError| match error {
+            SourceError::Io(error)
+                if error.kind() == io::ErrorKind::IsADirectory
+                    || (error.kind() == io::ErrorKind::PermissionDenied
+                        && fs::metadata(path).is_ok_and(|metadata| metadata.is_dir())) =>
+            {
+                SourceError::IsDirectory(error)
+            }
+            other => other,
+        };
+        let file = File::open(path).map_err(|error| classify(SourceError::Io(error)))?;
         // The size recorded by the file system is a hint only: it is
         // meaningless for pipes and devices and can change during the read.
         let size_hint = file
@@ -419,7 +446,7 @@ impl SourceMap {
             .ok()
             .filter(fs::Metadata::is_file)
             .map(|metadata| metadata.len());
-        let mut bytes = read_bounded(file, size_hint, limit)?;
+        let mut bytes = read_bounded(file, size_hint, limit).map_err(classify)?;
         let size = bytes.len() as u64;
         if bytes.starts_with(BYTE_ORDER_MARK_UTF8) {
             bytes.drain(..BYTE_ORDER_MARK_UTF8.len());
@@ -759,5 +786,23 @@ mod tests {
             .load(Path::new("this/file/does/not/exist.pgr"))
             .unwrap_err();
         assert!(matches!(error, SourceError::Io(_)));
+        // The compiler's own English text; the operating system's error is
+        // kept as the source.
+        assert_eq!(error.to_string(), "file not found");
+        let os_error = std::error::Error::source(&error)
+            .unwrap()
+            .downcast_ref::<io::Error>()
+            .unwrap();
+        assert_eq!(os_error.kind(), io::ErrorKind::NotFound);
+        assert!(os_error.raw_os_error().is_some());
+    }
+
+    #[test]
+    fn load_reports_directories_on_every_system() {
+        let dir = TempFile::new("directory", b"");
+        let error = SourceMap::new().load(&dir.dir).unwrap_err();
+        assert!(matches!(error, SourceError::IsDirectory(_)), "{error:?}");
+        assert_eq!(error.to_string(), "is a directory, not a file");
+        assert!(std::error::Error::source(&error).is_some());
     }
 }
