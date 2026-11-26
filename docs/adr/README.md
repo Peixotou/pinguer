@@ -34,6 +34,7 @@ supersedes an earlier one.
 | [0025](0025-string-interpolation-syntax.md) | String interpolation syntax | Proposed |
 | [0026](0026-locating-and-invoking-clang.md) | Locating and invoking clang | Proposed |
 | [0027](0027-parser-architecture.md) | Parser architecture | Accepted |
+| [0028](0028-ast-representation.md) | AST representation | Accepted |
 
 ## Template
 
