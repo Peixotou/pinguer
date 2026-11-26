@@ -67,7 +67,7 @@ and what does it cost to implement and to learn?*
 | Go | Simple tooling, concurrency | Adopted: single CLI, formatter as standard; concurrency model unresolved |
 | Python | Readability, `**` | Adopted: minimal punctuation, newline-terminated statements; `**` with Python's precedence planned ([ADR-0017](../docs/adr/0017-power-operator.md)) |
 | TypeScript | Type inference | Adopted: local inference in v0.1; richer inference later |
-| Kotlin | Null safety | Adopted: no null; absence is `Option<T>` ([TYPE_SYSTEM.md](TYPE_SYSTEM.md#null-safety)) |
+| Kotlin | Null safety | Adopted: no null; absence is `Option<T>` ([TYPE_SYSTEM.md](TYPE_SYSTEM.md#10-null-safety)) |
 | Swift | Protocols, value semantics, enums, `try` | Adopted: value semantics in v0.1; enums with payloads planned; prefix `try` planned ([ADR-0013](../docs/adr/0013-prefix-try.md)) |
 | F#, Elixir | Pipelines | Planned: <code>&#124;&gt;</code> inserting the first argument ([ADR-0019](../docs/adr/0019-pipeline-operator.md)) |
 | Zig | Explicit allocation, compile-time execution | Under evaluation: allocator-aware library, compile-time execution |

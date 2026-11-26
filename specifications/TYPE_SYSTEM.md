@@ -15,7 +15,7 @@ time, and programs with type errors are rejected before code generation.
    initializers; function signatures are always written out. This keeps
    signatures readable as documentation and keeps error messages local.
 3. **No null.** No type includes a null value. Absence is expressed with
-   `Option<T>` (Planned, see [Null safety](#null-safety)).
+   `Option<T>` (Planned, see [Null safety](#10-null-safety)).
 4. **Defined behaviour for every operation.** Every operator either produces
    a result, is rejected at compile time, or traps at run time.
 
@@ -209,7 +209,7 @@ These follow the incremental plan in [ROADMAP.md](../ROADMAP.md).
 | `i128`, `u128` | 128-bit integers | **Planned** (v0.2, [ADR-0016](../docs/adr/0016-additional-integer-types.md)). Same operator and trap rules as other integers. |
 | `byte` | alias for `u8` | **Planned** (v0.2, ADR-0016). Interchangeable with `u8`, as `int` is with `i64`. |
 
-## Null safety
+## 10. Null safety
 
 No Pinguer type contains a null value. Optional values use the library enum
 `Option<T>` with variants `Some(T)` and `None`. Planned conveniences:

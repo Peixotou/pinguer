@@ -90,7 +90,7 @@ Each item has documented options and a recommendation; none is adopted yet.
 | C11 | `module` declaration and `export` keyword | Neither: module = file, visibility = `public` | [MODULE_SYSTEM §2.2](MODULE_SYSTEM.md#22-file-based-modules) |
 | C12 | `init`, `borrow`, `parallel`, `supervisor` keywords | None reserved now | [OBJECT_MODEL](OBJECT_MODEL.md), [CONCURRENCY_MODEL](CONCURRENCY_MODEL.md) |
 | — | `repeat N { }` | Reject (redundant with `for _ in 0..N`) | — |
-| — | `none` literal | Use the `None` variant | [TYPE_SYSTEM](TYPE_SYSTEM.md#null-safety) |
+| — | `none` literal | Use the `None` variant | [TYPE_SYSTEM](TYPE_SYSTEM.md#10-null-safety) |
 | — | `range()`, `round()`, `typeof()` | Reject / method / compile-time `typeName<T>()` | [STANDARD_LIBRARY §3](STANDARD_LIBRARY.md#3-fundamental-functions-planned) |
 | — | `internal`, `readonly` | Undecided | [MODULE_SYSTEM §2.3](MODULE_SYSTEM.md#23-visibility-planned) |
 | — | Naming convention: lowerCamelCase functions, UpperCamelCase types | Confirm (implied by the approved names `sizeOf`, `alignOf`) | [ADR-0021](../docs/adr/0021-fundamental-library-functions.md) |

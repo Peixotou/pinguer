@@ -113,7 +113,7 @@ range and the expression is a compile-time error. Write `(-128) ** 1`.
 ## 4. Optional member access: `?.` (Planned)
 
 Decision: [ADR-0018](../docs/adr/0018-optional-operators.md). Requires
-`Option<T>` ([TYPE_SYSTEM.md](TYPE_SYSTEM.md#null-safety)).
+`Option<T>` ([TYPE_SYSTEM.md](TYPE_SYSTEM.md#10-null-safety)).
 
 **Semantics.** For `a?.b`, where `a: Option<T>`: if `a` is `None`, the result
 is `None`; if `a` is `Some(v)`, the result is `v.b` wrapped in `Some`. If
