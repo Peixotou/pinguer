@@ -133,6 +133,10 @@ fn forbidden_control_name(c: char) -> (&'static str, bool) {
     }
 }
 
+/// The longest invalid literal suffix, in characters, that is quoted in a
+/// diagnostic message.
+const MAX_QUOTED_SUFFIX: usize = 16;
+
 /// The note explaining the form of a Unicode escape.
 const UNICODE_ESCAPE_FORM: &str =
     "a Unicode escape is `\\u{` followed by one to six hexadecimal digits and `}`";
@@ -839,7 +843,14 @@ impl Lexer<'_> {
                         "expected at least one digit after the exponent marker",
                     )
             } else {
-                Diagnostic::error(format!("invalid suffix `{suffix}` on numeric literal"))
+                // The suffix is quoted only when it is short: messages are
+                // not cut like source excerpts, and the label shows it anyway.
+                let message = if suffix.chars().nth(MAX_QUOTED_SUFFIX).is_none() {
+                    format!("invalid suffix `{suffix}` on numeric literal")
+                } else {
+                    "invalid suffix on numeric literal".to_owned()
+                };
+                Diagnostic::error(message)
                     .with_code(codes::INVALID_NUMBER)
                     .with_primary(span, "invalid suffix")
                     .with_note("numeric literal suffixes are not supported in Pinguer v0.1")

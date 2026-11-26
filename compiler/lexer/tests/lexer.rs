@@ -432,6 +432,23 @@ fn missing_digits_after_prefix() {
 }
 
 #[test]
+fn long_suffixes_are_not_quoted_in_the_message() {
+    let short = lex("10abcdefghijklmnop");
+    assert_eq!(
+        short.diagnostics[0].message,
+        "invalid suffix `abcdefghijklmnop` on numeric literal"
+    );
+    let source = format!("1{}", "q".repeat(100_000));
+    let long = lex(&source);
+    assert_eq!(
+        long.diagnostics[0].message,
+        "invalid suffix on numeric literal"
+    );
+    // The label still covers the whole suffix.
+    assert_eq!(long.labelled(), [&source[1..]]);
+}
+
+#[test]
 fn uppercase_prefixes_are_reported_as_prefix_errors() {
     for (source, prefix, help) in [
         ("0X1F", "0X", "write the hexadecimal prefix as `0x`"),
