@@ -7,7 +7,9 @@
 //!
 //! Every compiler stage reports problems into a [`Diagnostics`] collection
 //! instead of stopping at the first error, so that a single run can report as
-//! many independent problems as possible.
+//! many independent problems as possible. A collection can be given a limit
+//! on the diagnostics it retains; further diagnostics are counted but not
+//! stored, and [`Diagnostics::suppression_notice`] says how many there were.
 
 pub mod codes;
 pub mod human;
@@ -169,72 +171,157 @@ impl Diagnostic {
 }
 
 /// An ordered collection of diagnostics produced during a compilation.
+///
+/// A collection created with [`Diagnostics::with_limit`] retains at most that
+/// many diagnostics: the first ones reported. Later diagnostics are counted
+/// but not stored, so [`Diagnostics::error_count`] and
+/// [`Diagnostics::has_errors`] always describe everything that was reported,
+/// while [`Diagnostics::len`], [`Diagnostics::iter`] and the other accessors
+/// see only the retained diagnostics.
 #[derive(Clone, Debug, Default)]
 pub struct Diagnostics {
     items: Vec<Diagnostic>,
+    /// The maximum number of retained diagnostics, or `None` for no limit.
+    limit: Option<usize>,
+    errors: usize,
+    warnings: usize,
+    suppressed: usize,
 }
 
 impl Diagnostics {
-    /// Creates an empty collection.
+    /// Creates an empty collection without a limit.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Records a diagnostic.
-    pub fn push(&mut self, diagnostic: Diagnostic) {
-        self.items.push(diagnostic);
+    /// Creates an empty collection that retains at most `limit` diagnostics.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `limit` is zero.
+    #[must_use]
+    pub fn with_limit(limit: usize) -> Self {
+        assert!(limit > 0, "a diagnostic limit must be at least one");
+        Self {
+            limit: Some(limit),
+            ..Self::default()
+        }
     }
 
-    /// Returns `true` if at least one error has been recorded.
+    /// Returns the maximum number of retained diagnostics, if there is one.
+    #[must_use]
+    pub fn limit(&self) -> Option<usize> {
+        self.limit
+    }
+
+    /// Returns how many more diagnostics will be retained, or `None` if the
+    /// collection has no limit.
+    #[must_use]
+    pub fn remaining_capacity(&self) -> Option<usize> {
+        self.limit.map(|limit| limit - self.items.len())
+    }
+
+    /// Records a diagnostic. If the limit has been reached, the diagnostic is
+    /// counted and dropped.
+    pub fn push(&mut self, diagnostic: Diagnostic) {
+        self.count(diagnostic.severity, 1);
+        if self.remaining_capacity() == Some(0) {
+            self.suppressed += 1;
+        } else {
+            self.items.push(diagnostic);
+        }
+    }
+
+    /// Counts `count` diagnostics of `severity` that their producer
+    /// discarded without pushing them, because they would have been
+    /// suppressed anyway. Keeps the counts exact for stages that bound the
+    /// memory they spend on diagnostics.
+    pub fn record_suppressed(&mut self, severity: Severity, count: usize) {
+        self.count(severity, count);
+        self.suppressed += count;
+    }
+
+    fn count(&mut self, severity: Severity, count: usize) {
+        match severity {
+            Severity::Error => self.errors += count,
+            Severity::Warning => self.warnings += count,
+            Severity::Note => {}
+        }
+    }
+
+    /// Returns `true` if at least one error has been reported, including
+    /// suppressed errors.
     #[must_use]
     pub fn has_errors(&self) -> bool {
-        self.error_count() > 0
+        self.errors > 0
     }
 
-    /// Returns the number of recorded errors.
+    /// Returns the number of reported errors, including suppressed errors.
     #[must_use]
     pub fn error_count(&self) -> usize {
-        self.count(Severity::Error)
+        self.errors
     }
 
-    /// Returns the number of recorded warnings.
+    /// Returns the number of reported warnings, including suppressed
+    /// warnings.
     #[must_use]
     pub fn warning_count(&self) -> usize {
-        self.count(Severity::Warning)
+        self.warnings
     }
 
-    fn count(&self, severity: Severity) -> usize {
-        self.items
-            .iter()
-            .filter(|diagnostic| diagnostic.severity == severity)
-            .count()
+    /// Returns the number of diagnostics that were reported but not retained.
+    #[must_use]
+    pub fn suppressed_count(&self) -> usize {
+        self.suppressed
     }
 
-    /// Returns `true` if no diagnostics have been recorded.
+    /// Returns a note stating how many diagnostics were suppressed, or `None`
+    /// if none were. Renderers print it after the retained diagnostics so
+    /// that reaching the limit is never silent.
+    #[must_use]
+    pub fn suppression_notice(&self) -> Option<Diagnostic> {
+        let limit = self.limit?;
+        if self.suppressed == 0 {
+            return None;
+        }
+        let plural = if self.suppressed == 1 { "" } else { "s" };
+        Some(
+            Diagnostic::new(
+                Severity::Note,
+                format!("{} more diagnostic{plural} not shown", self.suppressed),
+            )
+            .with_code(codes::DIAGNOSTICS_SUPPRESSED)
+            .with_note(format!(
+                "at most {limit} diagnostics are reported in one compilation"
+            )),
+        )
+    }
+
+    /// Returns `true` if no diagnostic has been retained.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
 
-    /// Returns the number of recorded diagnostics.
+    /// Returns the number of retained diagnostics.
     #[must_use]
     pub fn len(&self) -> usize {
         self.items.len()
     }
 
-    /// Returns the recorded diagnostics in the order they were reported.
+    /// Returns the retained diagnostics in the order they were reported.
     #[must_use]
     pub fn as_slice(&self) -> &[Diagnostic] {
         &self.items
     }
 
-    /// Returns an iterator over the recorded diagnostics.
+    /// Returns an iterator over the retained diagnostics.
     pub fn iter(&self) -> std::slice::Iter<'_, Diagnostic> {
         self.items.iter()
     }
 
-    /// Consumes the collection and returns the diagnostics.
+    /// Consumes the collection and returns the retained diagnostics.
     #[must_use]
     pub fn into_vec(self) -> Vec<Diagnostic> {
         self.items
@@ -266,6 +353,69 @@ mod tests {
         assert_eq!(diagnostics.error_count(), 2);
         assert_eq!(diagnostics.warning_count(), 1);
         assert_eq!(diagnostics.len(), 3);
+    }
+
+    #[test]
+    fn limit_retains_the_first_diagnostics_and_counts_the_rest() {
+        let mut diagnostics = Diagnostics::with_limit(2);
+        assert_eq!(diagnostics.remaining_capacity(), Some(2));
+        diagnostics.push(Diagnostic::error("e1"));
+        diagnostics.push(Diagnostic::warning("w1"));
+        diagnostics.push(Diagnostic::error("e2"));
+        diagnostics.push(Diagnostic::warning("w2"));
+        diagnostics.push(Diagnostic::error("e3"));
+        let retained: Vec<&str> = diagnostics.iter().map(|d| d.message.as_str()).collect();
+        assert_eq!(retained, ["e1", "w1"]);
+        assert_eq!(diagnostics.remaining_capacity(), Some(0));
+        assert_eq!(diagnostics.error_count(), 3);
+        assert_eq!(diagnostics.warning_count(), 2);
+        assert_eq!(diagnostics.suppressed_count(), 3);
+
+        let notice = diagnostics.suppression_notice().unwrap();
+        assert_eq!(notice.severity, Severity::Note);
+        assert_eq!(notice.code, Some(codes::DIAGNOSTICS_SUPPRESSED));
+        assert_eq!(notice.message, "3 more diagnostics not shown");
+        assert_eq!(
+            notice.notes,
+            ["at most 2 diagnostics are reported in one compilation"]
+        );
+    }
+
+    #[test]
+    fn no_notice_without_suppression() {
+        let mut limited = Diagnostics::with_limit(1);
+        limited.push(Diagnostic::error("only"));
+        assert!(limited.suppression_notice().is_none());
+
+        let mut unlimited = Diagnostics::new();
+        for _ in 0..1_000 {
+            unlimited.push(Diagnostic::error("e"));
+        }
+        assert_eq!(unlimited.len(), 1_000);
+        assert_eq!(unlimited.remaining_capacity(), None);
+        assert!(unlimited.suppression_notice().is_none());
+    }
+
+    #[test]
+    fn record_suppressed_keeps_counts_exact() {
+        let mut diagnostics = Diagnostics::with_limit(1);
+        diagnostics.push(Diagnostic::error("kept"));
+        diagnostics.record_suppressed(Severity::Error, 41);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics.error_count(), 42);
+        assert_eq!(
+            diagnostics.suppression_notice().unwrap().message,
+            "41 more diagnostics not shown"
+        );
+        diagnostics.record_suppressed(Severity::Note, 1);
+        assert_eq!(diagnostics.error_count(), 42);
+        assert_eq!(diagnostics.suppressed_count(), 42);
+    }
+
+    #[test]
+    #[should_panic(expected = "at least one")]
+    fn zero_limit_is_rejected() {
+        let _ = Diagnostics::with_limit(0);
     }
 
     #[test]

@@ -83,6 +83,9 @@ define_codes! {
     INVALID_UTF8 = 2, "source file is not valid UTF-8";
     /// A source file exceeds the maximum supported size.
     FILE_TOO_LARGE = 3, "source file exceeds the maximum supported size";
+    /// The diagnostic limit was reached; further diagnostics were counted
+    /// but not reported.
+    DIAGNOSTICS_SUPPRESSED = 4, "further diagnostics suppressed after reaching the limit";
 
     /// A character that cannot start any token.
     UNKNOWN_CHARACTER = 1001, "character not valid in this position";

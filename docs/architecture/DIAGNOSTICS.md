@@ -19,6 +19,12 @@ pub struct Diagnostic {
 Stages push diagnostics into a `Diagnostics` collection and continue. The
 first primary label determines the location in the header.
 
+A collection may have a limit (`Diagnostics::with_limit`). It then retains
+only the first diagnostics up to the limit; later ones are counted, so error
+and warning counts stay exact, but not stored. When anything was suppressed,
+`Diagnostics::suppression_notice` returns a `P0004` note giving the number of
+suppressed diagnostics, which renderers print after the retained ones.
+
 ## 2. Writing good diagnostics
 
 * **Message:** lowercase, no trailing period, states the problem
@@ -101,7 +107,7 @@ Strings escape all control characters as well as U+2028 and U+2029.
 
 | Range | Stage | Allocated codes |
 |---|---|---|
-| P0001–P0999 | Driver, files | P0001–P0003 |
+| P0001–P0999 | Driver, files | P0001–P0004 |
 | P1001–P1999 | Lexical analysis | P1001–P1011 |
 | P2001–P2999 | Syntax | — |
 | P3001–P3999 | Name resolution | — |
@@ -117,4 +123,4 @@ The authoritative list, with summaries, is `pinguer_diagnostics::codes::REGISTRY
 * `pinguer explain P1002` printing a long-form explanation for each code.
 * Warning levels and lint configuration (`allow`, `warn`, `deny`).
 * Colored output when the terminal supports it.
-* An error limit and deduplication of cascading errors.
+* Deduplication of cascading errors.
