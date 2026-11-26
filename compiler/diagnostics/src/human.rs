@@ -305,19 +305,42 @@ fn floor_char_boundary(text: &str, mut index: usize) -> usize {
     index
 }
 
+/// Characters other than controls that are invisible or change how the text
+/// around them is displayed: Unicode's default-ignorable code points
+/// (DerivedCoreProperties.txt, `Default_Ignorable_Code_Point`), the
+/// interlinear annotation characters and the line and paragraph separators.
+/// `docs/architecture/DIAGNOSTICS.md` lists the same ranges.
+const INVISIBLE: &[(char, char)] = &[
+    ('\u{00AD}', '\u{00AD}'),   // soft hyphen
+    ('\u{034F}', '\u{034F}'),   // combining grapheme joiner
+    ('\u{061C}', '\u{061C}'),   // Arabic letter mark
+    ('\u{115F}', '\u{1160}'),   // Hangul choseong and jungseong fillers
+    ('\u{17B4}', '\u{17B5}'),   // Khmer inherent vowels
+    ('\u{180B}', '\u{180F}'),   // Mongolian variation selectors, vowel separator
+    ('\u{200B}', '\u{200F}'),   // zero-width space and joiners, LRM, RLM
+    ('\u{2028}', '\u{202E}'),   // line and paragraph separators, bidi embeddings
+    ('\u{2060}', '\u{206F}'),   // word joiner, invisible operators, isolates, deprecated
+    ('\u{3164}', '\u{3164}'),   // Hangul filler
+    ('\u{FE00}', '\u{FE0F}'),   // variation selectors
+    ('\u{FEFF}', '\u{FEFF}'),   // zero-width no-break space
+    ('\u{FFA0}', '\u{FFA0}'),   // halfwidth Hangul filler
+    ('\u{FFF0}', '\u{FFFB}'),   // reserved, interlinear annotation characters
+    ('\u{1BCA0}', '\u{1BCA3}'), // shorthand format controls
+    ('\u{1D173}', '\u{1D17A}'), // musical symbol formatting
+    ('\u{E0000}', '\u{E0FFF}'), // tags, variation selectors supplement, reserved
+];
+
 /// Returns `true` for characters that must not be written to a terminal
-/// verbatim because they are invisible or alter how surrounding text is shown.
+/// verbatim because they are invisible or alter how surrounding text is
+/// shown: control characters and the [`INVISIBLE`] ranges.
 pub(crate) fn needs_escape(c: char) -> bool {
+    if c.is_ascii() {
+        return c.is_ascii_control();
+    }
     c.is_control()
-        || matches!(
-            c,
-            '\u{061C}'              // Arabic letter mark
-            | '\u{200B}'..='\u{200F}' // zero-width characters, LRM, RLM
-            | '\u{2028}' | '\u{2029}' // line and paragraph separators
-            | '\u{202A}'..='\u{202E}' // bidirectional embeddings and overrides
-            | '\u{2060}'..='\u{2069}' // word joiner, invisible operators, isolates
-            | '\u{FEFF}'              // zero-width no-break space
-        )
+        || INVISIBLE
+            .iter()
+            .any(|&(first, last)| (first..=last).contains(&c))
 }
 
 fn push_display(out: &mut String, c: char) {
@@ -444,6 +467,59 @@ error: example
         assert!(rendered.contains("1 | a<U+202E>b\n"), "{rendered}");
         assert!(rendered.contains("  |  ^^^^^^^^ here\n"), "{rendered}");
         assert!(!rendered.contains('\u{202E}'));
+    }
+
+    #[test]
+    fn invisible_characters_are_escaped() {
+        for &(first, last) in INVISIBLE {
+            assert!(needs_escape(first), "{:04X}", u32::from(first));
+            assert!(needs_escape(last), "{:04X}", u32::from(last));
+        }
+        // The characters missing from the original list.
+        for c in [
+            '\u{AD}',
+            '\u{34F}',
+            '\u{180E}',
+            '\u{206A}',
+            '\u{206F}',
+            '\u{3164}',
+            '\u{FE0F}',
+            '\u{FFF9}',
+            '\u{FFFB}',
+            '\u{E0001}',
+            '\u{E0041}',
+            '\u{E007F}',
+        ] {
+            assert!(needs_escape(c), "{:04X}", u32::from(c));
+        }
+        // Controls, including C1 controls such as next line.
+        for c in ['\u{0}', '\u{1B}', '\u{7F}', '\u{85}', '\u{9B}'] {
+            assert!(needs_escape(c), "{:04X}", u32::from(c));
+        }
+        // Visible text, including spaces that are visible as spaces.
+        for c in [
+            'a',
+            ' ',
+            'é',
+            '€',
+            '🐧',
+            '\u{A0}',
+            '\u{3000}',
+            '\u{FFFD}',
+            '\u{E1000}',
+        ] {
+            assert!(!needs_escape(c), "{:04X}", u32::from(c));
+        }
+    }
+
+    #[test]
+    fn supplementary_invisible_characters_are_escaped_and_markers_follow() {
+        // A tag character (`<U+E0041>`, 9 cells) before the label.
+        let (map, file) = setup("tag.pgr", "a\u{E0041}b");
+        let diagnostic = Diagnostic::error("tag").with_primary(Span::new(file, 5, 6), "here");
+        let rendered = render(&map, &diagnostic);
+        assert!(rendered.contains("1 | a<U+E0041>b\n"), "{rendered}");
+        assert!(rendered.contains("  |           ^ here\n"), "{rendered}");
     }
 
     #[test]

@@ -68,10 +68,22 @@ Rules implemented by the renderer:
   excerpt get one excerpt each. This bounds the size of every diagnostic
   independently of line length: without it, many diagnostics on one long
   line would each repeat the whole line.
-* Tabs are expanded to four spaces. Control characters, bidirectional
-  formatting characters and invisible formatting characters in source lines,
-  messages and file names are shown as `<U+XXXX>`, so diagnostics cannot
-  reorder or hide text in a terminal.
+* Tabs are expanded to four spaces. In source lines, messages and file names,
+  the following characters are shown as `<U+XXXX>`, so that diagnostics
+  cannot reorder or hide text in a terminal:
+  * every control character (C0, DEL and C1, including U+0085);
+  * Unicode's default-ignorable code points and the other invisible
+    formatting characters: U+00AD, U+034F, U+061C, U+115F–U+1160,
+    U+17B4–U+17B5, U+180B–U+180F, U+200B–U+200F, U+2028–U+202E (line and
+    paragraph separators, bidirectional embeddings and overrides),
+    U+2060–U+206F, U+3164, U+FE00–U+FE0F (variation selectors), U+FEFF,
+    U+FFA0, U+FFF0–U+FFFB (including the interlinear annotation
+    characters), U+1BCA0–U+1BCA3, U+1D173–U+1D17A and U+E0000–U+E0FFF
+    (tags and supplementary variation selectors).
+
+  The list lives in `pinguer_diagnostics::human` (`INVISIBLE`), whose tests
+  check every range. Spaces such as U+00A0 are visible as spaces and are
+  shown unchanged.
 * Output is never colored (yet).
 
 Known limitation: wide characters (CJK, most emoji) are assumed to occupy one
@@ -101,7 +113,9 @@ on its own line, written to standard error.
 | `notes`, `help` | array of strings | |
 
 Within `format_version` 1, fields may be added but never removed or changed.
-Strings escape all control characters as well as U+2028 and U+2029.
+Strings escape the same characters as the human format, as `\uXXXX`;
+characters outside the Basic Multilingual Plane are escaped as a UTF-16
+surrogate pair (`󠁁` for U+E0041), as RFC 8259 requires.
 
 ## 5. Code registry
 

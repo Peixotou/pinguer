@@ -108,8 +108,10 @@ fn write_string_array(out: &mut String, items: &[String]) {
 ///
 /// Besides the mandatory escapes, every character that the human renderer
 /// considers unsafe for a terminal is escaped as well: DEL and C1 controls,
-/// bidirectional formatting characters, zero-width characters and U+2028 and
-/// U+2029 (which also keeps the output valid JavaScript).
+/// bidirectional formatting characters, the other invisible characters and
+/// U+2028 and U+2029 (which also keeps the output valid JavaScript).
+/// Characters outside the Basic Multilingual Plane are escaped as a UTF-16
+/// surrogate pair, the only form JSON allows for them.
 fn write_string(out: &mut String, value: &str) {
     out.push('"');
     for c in value.chars() {
@@ -120,7 +122,9 @@ fn write_string(out: &mut String, value: &str) {
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
             c if crate::human::needs_escape(c) => {
-                let _ = write!(out, "\\u{:04x}", u32::from(c));
+                for unit in c.encode_utf16(&mut [0; 2]) {
+                    let _ = write!(out, "\\u{unit:04x}");
+                }
             }
             c => out.push(c),
         }
@@ -181,6 +185,18 @@ mod tests {
         write_string(&mut out, "evil\u{202E}name\u{200B}.pgr");
         let bs = '\\';
         assert_eq!(out, format!("\"evil{bs}u202ename{bs}u200b.pgr\""));
+    }
+
+    #[test]
+    fn invisible_characters_are_escaped_as_valid_json() {
+        let mut out = String::new();
+        write_string(&mut out, "soft\u{AD}hyphen tag\u{E0041}x");
+        let bs = '\\';
+        // U+E0041 is the surrogate pair DB40 DC41; `1` would not be JSON.
+        assert_eq!(
+            out,
+            format!("\"soft{bs}u00adhyphen tag{bs}udb40{bs}udc41x\"")
+        );
     }
 
     #[test]
