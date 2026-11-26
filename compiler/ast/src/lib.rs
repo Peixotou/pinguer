@@ -9,6 +9,7 @@
 //! [ADR-0028]: https://github.com/Peixotou/pinguer/blob/main/docs/adr/0028-ast-representation.md
 
 mod expr;
+mod stmt;
 mod ty;
 
 use std::fmt;
@@ -16,6 +17,7 @@ use std::fmt;
 use pinguer_source::Span;
 
 pub use expr::{Base, BinaryOp, Expr, ExprKind, Literal, UnaryOp};
+pub use stmt::{AssignOp, Binding, BindingKind, Block, Stmt, StmtKind};
 pub use ty::{Type, TypeKind};
 
 /// Identifies a node of one file's syntax tree.
