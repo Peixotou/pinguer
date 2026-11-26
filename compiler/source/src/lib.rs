@@ -27,6 +27,13 @@ pub const MAX_FILE_SIZE: usize = u32::MAX as usize;
 
 const BYTE_ORDER_MARK: char = '\u{FEFF}';
 
+/// Distance in bytes between two entries of [`SourceFile::char_checkpoints`].
+///
+/// Converting an offset to a column scans at most this many bytes twice, and
+/// the checkpoints of a non-ASCII file cost 4 bytes per `CHECKPOINT_STRIDE`
+/// bytes of text (about 1.6% of the file size).
+const CHECKPOINT_STRIDE: usize = 256;
+
 /// Identifies a file registered in a [`SourceMap`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FileId(u32);
@@ -121,6 +128,10 @@ pub struct SourceFile {
     text: String,
     /// Byte offset at which each line starts. Always contains at least `0`.
     line_starts: Vec<u32>,
+    /// Entry `i` is the number of characters that start before byte offset
+    /// `i * CHECKPOINT_STRIDE`. Empty when the text is ASCII, because byte
+    /// and character offsets then coincide.
+    char_checkpoints: Vec<u32>,
 }
 
 impl SourceFile {
@@ -132,11 +143,36 @@ impl SourceFile {
                 (index + 1) as u32
             }))
             .collect();
+        let char_checkpoints = if text.is_ascii() {
+            Vec::new()
+        } else {
+            let mut checkpoints = Vec::with_capacity(text.len() / CHECKPOINT_STRIDE + 1);
+            let mut chars = 0;
+            checkpoints.push(chars);
+            for chunk in text.as_bytes().as_chunks::<CHECKPOINT_STRIDE>().0 {
+                // At most `text.len()` characters, so the sum fits in a `u32`.
+                chars += count_char_starts(chunk) as u32;
+                checkpoints.push(chars);
+            }
+            checkpoints
+        };
         Self {
             name,
             text,
             line_starts,
+            char_checkpoints,
         }
+    }
+
+    /// Returns the number of characters that start before `offset`, which
+    /// must be a character boundary.
+    fn chars_before(&self, offset: usize) -> usize {
+        if self.char_checkpoints.is_empty() {
+            return offset;
+        }
+        let checkpoint = offset / CHECKPOINT_STRIDE;
+        let scanned = &self.text.as_bytes()[checkpoint * CHECKPOINT_STRIDE..offset];
+        self.char_checkpoints[checkpoint] as usize + count_char_starts(scanned)
     }
 
     /// Returns the display name of the file, usually its path.
@@ -165,6 +201,10 @@ impl SourceFile {
     /// Offsets that fall inside a multi-byte character are attributed to that
     /// character's column.
     ///
+    /// The cost does not depend on the length of the line: a binary search
+    /// over the line starts, plus a scan of at most two blocks of 256 bytes
+    /// in files that contain non-ASCII text.
+    ///
     /// # Panics
     ///
     /// Panics if `offset` is greater than the length of the file.
@@ -181,10 +221,12 @@ impl SourceFile {
             Err(insertion) => insertion - 1,
         };
         let line_start = self.line_starts[line_index] as usize;
-        let prefix = &self.text.as_bytes()[line_start..offset as usize];
-        // Count the characters that *start* before `offset`. Continuation
-        // bytes (0b10xx_xxxx) do not start a character.
-        let preceding_chars = prefix.iter().filter(|&&b| b & 0xC0 != 0x80).count();
+        let mut offset = offset as usize;
+        while !self.text.is_char_boundary(offset) {
+            offset -= 1;
+        }
+        let preceding_chars = self.chars_before(offset) - self.chars_before(line_start);
+        // Both values are at most `MAX_FILE_SIZE`, so they fit in a `u32`.
         LineCol {
             line: line_index as u32 + 1,
             column: preceding_chars as u32 + 1,
@@ -224,6 +266,12 @@ impl SourceFile {
     pub fn line_text(&self, line: usize) -> &str {
         &self.text[self.line_range(line)]
     }
+}
+
+/// Counts the bytes that start a UTF-8 character, that is, every byte except
+/// continuation bytes (`0b10xx_xxxx`).
+fn count_char_starts(bytes: &[u8]) -> usize {
+    bytes.iter().filter(|&&byte| byte & 0xC0 != 0x80).count()
 }
 
 /// An error produced while registering or loading a source file.
@@ -405,8 +453,74 @@ mod tests {
         assert_eq!(file.line_col(2), lc(1, 2));
         assert_eq!(file.line_col(6), lc(1, 3));
         assert_eq!(file.line_col(7), lc(1, 4));
-        // An offset inside the penguin is attributed to the penguin.
-        assert_eq!(file.line_col(4), lc(1, 2 + 1));
+        // Offsets inside the penguin are attributed to the penguin.
+        for inside in 3..=5 {
+            assert_eq!(file.line_col(inside), lc(1, 2));
+        }
+    }
+
+    /// The column definition, computed directly from the line start.
+    fn naive_line_col(text: &str, offset: usize) -> LineCol {
+        let mut offset = offset;
+        while !text.is_char_boundary(offset) {
+            offset -= 1;
+        }
+        let before = &text[..offset];
+        let line_start = before.rfind('\n').map_or(0, |index| index + 1);
+        LineCol {
+            line: before.matches('\n').count() as u32 + 1,
+            column: before[line_start..].chars().count() as u32 + 1,
+        }
+    }
+
+    #[test]
+    fn line_col_matches_the_definition_for_every_offset() {
+        // Fragments of 1 to 4 bytes so that characters straddle checkpoint
+        // boundaries at every alignment; xorshift with fixed seeds.
+        const FRAGMENTS: &[&str] = &["a", "\n", "\r\n", "\t", "é", "€", "🐧", "\u{301}", "xyz"];
+        for seed in 1..=40u64 {
+            let mut state = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
+            let mut text = String::new();
+            let length = 200 + (seed as usize * 97) % 1_500;
+            while text.len() < length {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                text.push_str(FRAGMENTS[(state % FRAGMENTS.len() as u64) as usize]);
+            }
+            let (map, id) = single(&text);
+            let file = map.file(id);
+            for offset in 0..=text.len() {
+                assert_eq!(
+                    file.line_col(offset as u32),
+                    naive_line_col(&text, offset),
+                    "seed {seed}, offset {offset}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn columns_are_exact_at_the_end_of_a_long_non_ascii_line() {
+        let mut text = String::from("é");
+        text.push_str(&"a".repeat(100_000));
+        text.push('🐧');
+        text.push_str("\nb");
+        let (map, id) = single(&text);
+        let file = map.file(id);
+        let penguin = text.find('🐧').unwrap() as u32;
+        assert_eq!(file.line_col(penguin), lc(1, 100_002));
+        assert_eq!(file.line_col(penguin + 4), lc(1, 100_003));
+        assert_eq!(file.line_col(text.len() as u32), lc(2, 2));
+    }
+
+    #[test]
+    fn ascii_files_need_no_character_index() {
+        let (map, id) = single(&"let x = 1\n".repeat(1_000));
+        assert!(map.file(id).char_checkpoints.is_empty());
+        let (map, id) = single(&"é".repeat(1_000));
+        // One checkpoint per full 256-byte block, plus the initial one.
+        assert_eq!(map.file(id).char_checkpoints.len(), 2_000 / 256 + 1);
     }
 
     #[test]
