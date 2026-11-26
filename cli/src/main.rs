@@ -4,6 +4,7 @@
 //! available. Every planned command is recognised and reports that it is not
 //! available yet, instead of pretending to work.
 
+use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::io::{self, Write};
 use std::path::Path;
@@ -123,7 +124,9 @@ impl Output {
 }
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    // `args_os`, not `args`: an argument that is not valid Unicode, such as a
+    // file name on Linux, must not make the process panic.
+    let args: Vec<OsString> = std::env::args_os().skip(1).collect();
     let mut output = Output {
         stdout: io::BufWriter::with_capacity(64 * 1024, io::stdout().lock()),
         stderr: io::stderr().lock(),
@@ -134,22 +137,26 @@ fn main() -> ExitCode {
     ExitCode::from(code)
 }
 
-fn run(args: &[String], output: &mut Output) -> u8 {
+fn run(args: &[OsString], output: &mut Output) -> u8 {
     let Some(command) = args.first() else {
         output.out(&help_text());
         return status::SUCCESS;
     };
+    let Some(command) = command.to_str() else {
+        return output.usage_error(&format!("unknown command `{}`", command.display()));
+    };
     let rest = &args[1..];
     let takes_no_arguments = matches!(
-        command.as_str(),
+        command,
         "-h" | "--help" | "help" | "-V" | "--version" | "version"
     );
     if takes_no_arguments && let Some(extra) = rest.first() {
         return output.usage_error(&format!(
-            "unexpected argument `{extra}`; `{command}` takes no arguments"
+            "unexpected argument `{}`; `{command}` takes no arguments",
+            extra.display()
         ));
     }
-    match command.as_str() {
+    match command {
         "-h" | "--help" | "help" => {
             output.out(&help_text());
             status::SUCCESS
@@ -204,45 +211,50 @@ not stable.
     )
 }
 
-fn debug(args: &[String], output: &mut Output) -> u8 {
-    match args.first().map(String::as_str) {
-        Some("tokens") => debug_tokens(&args[1..], output),
-        Some(other) => output.usage_error(&format!("unknown debug command `{other}`")),
+fn debug(args: &[OsString], output: &mut Output) -> u8 {
+    match args.first() {
+        Some(command) if command == "tokens" => debug_tokens(&args[1..], output),
+        Some(other) => output.usage_error(&format!("unknown debug command `{}`", other.display())),
         None => output.usage_error("missing debug command; the available one is `tokens`"),
     }
 }
 
-fn debug_tokens(args: &[String], output: &mut Output) -> u8 {
+/// Parses the arguments of `debug tokens`. Options are compared as text; an
+/// argument that is not valid Unicode can only be the file name, which is
+/// passed to the operating system unchanged.
+fn debug_tokens(args: &[OsString], output: &mut Output) -> u8 {
     let mut format = DiagnosticFormat::Human;
-    let mut path = None;
+    let mut path: Option<&OsStr> = None;
     let mut index = 0;
     while index < args.len() {
-        let arg = args[index].as_str();
-        let value = if let Some(value) = arg.strip_prefix("--diagnostic-format=") {
-            Some(value)
-        } else if arg == "--diagnostic-format" {
+        let arg = args[index].as_os_str();
+        let text = arg.to_str();
+        let value = if let Some(value) = text.and_then(|t| t.strip_prefix("--diagnostic-format=")) {
+            Some(OsStr::new(value))
+        } else if text == Some("--diagnostic-format") {
             index += 1;
             match args.get(index) {
-                Some(value) => Some(value.as_str()),
+                Some(value) => Some(value.as_os_str()),
                 None => return output.usage_error("`--diagnostic-format` requires a value"),
             }
         } else {
             None
         };
         if let Some(value) = value {
-            format = match value {
-                "human" => DiagnosticFormat::Human,
-                "json" => DiagnosticFormat::Json,
-                other => {
+            format = match value.to_str() {
+                Some("human") => DiagnosticFormat::Human,
+                Some("json") => DiagnosticFormat::Json,
+                _ => {
                     return output.usage_error(&format!(
-                        "invalid diagnostic format `{other}`; expected `human` or `json`"
+                        "invalid diagnostic format `{}`; expected `human` or `json`",
+                        value.display()
                     ));
                 }
             };
-        } else if arg.starts_with('-') {
+        } else if arg.as_encoded_bytes().starts_with(b"-") {
             // Reading from standard input (`-`) is not supported, and file
             // names starting with `-` must be written as `./-name`.
-            return output.usage_error(&format!("unknown option `{arg}`"));
+            return output.usage_error(&format!("unknown option `{}`", arg.display()));
         } else if path.is_some() {
             return output.usage_error("`debug tokens` accepts exactly one file");
         } else {
@@ -256,7 +268,8 @@ fn debug_tokens(args: &[String], output: &mut Output) -> u8 {
 
     let mut map = SourceMap::new();
     let mut diagnostics = Diagnostics::with_limit(DIAGNOSTIC_LIMIT);
-    let file = match map.load(Path::new(path)) {
+    let path = Path::new(path);
+    let file = match map.load(path) {
         Ok(file) => file,
         Err(error) => {
             diagnostics.push(load_error(path, &error));
@@ -283,14 +296,14 @@ fn debug_tokens(args: &[String], output: &mut Output) -> u8 {
     }
 }
 
-fn load_error(path: &str, error: &SourceError) -> Diagnostic {
+fn load_error(path: &Path, error: &SourceError) -> Diagnostic {
     let code = match error {
         SourceError::Io(_) => codes::CANNOT_READ_FILE,
         SourceError::InvalidUtf8 { .. } => codes::INVALID_UTF8,
         SourceError::TooLarge { .. } => codes::FILE_TOO_LARGE,
     };
     let mut diagnostic =
-        Diagnostic::error(format!("cannot load `{path}`: {error}")).with_code(code);
+        Diagnostic::error(format!("cannot load `{}`: {error}", path.display())).with_code(code);
     if matches!(error, SourceError::InvalidUtf8 { .. }) {
         diagnostic = diagnostic.with_note("Pinguer source files must be encoded in UTF-8");
     }

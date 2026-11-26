@@ -1,5 +1,6 @@
 //! End-to-end tests that run the `pinguer` executable.
 
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -302,6 +303,100 @@ fn closed_standard_output_is_not_an_error() {
     let output = child.wait_with_output().unwrap();
     assert_eq!(output.status.code(), Some(0));
     assert!(output.stderr.is_empty(), "{}", stderr(&output));
+}
+
+/// Returns `prefix` followed by something that is not valid Unicode but is a
+/// valid argument and file name: an unpaired surrogate on Windows, the byte
+/// 0xFF on Unix.
+#[cfg(windows)]
+fn non_unicode(prefix: &str) -> OsString {
+    use std::os::windows::ffi::OsStringExt;
+    let mut wide: Vec<u16> = prefix.encode_utf16().collect();
+    wide.push(0xD800);
+    OsString::from_wide(&wide)
+}
+
+#[cfg(unix)]
+fn non_unicode(prefix: &str) -> OsString {
+    use std::os::unix::ffi::OsStringExt;
+    let mut bytes = prefix.as_bytes().to_vec();
+    bytes.push(0xFF);
+    OsString::from_vec(bytes)
+}
+
+fn pinguer_os(args: &[OsString]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_pinguer"))
+        .args(args)
+        .current_dir(fixtures())
+        .output()
+        .expect("failed to run the pinguer executable")
+}
+
+#[test]
+fn non_unicode_arguments_are_usage_errors_where_text_is_expected() {
+    let os = |s: &str| OsString::from(s);
+    for (args, message) in [
+        (vec![non_unicode("x")], "unknown command `x\u{FFFD}`"),
+        (
+            vec![os("version"), non_unicode("y")],
+            "unexpected argument `y\u{FFFD}`",
+        ),
+        (vec![os("debug"), non_unicode("t")], "unknown debug command"),
+        (
+            vec![os("debug"), os("tokens"), non_unicode("--opt")],
+            "unknown option `--opt\u{FFFD}`",
+        ),
+        (
+            vec![
+                os("debug"),
+                os("tokens"),
+                os("hello.pgr"),
+                os("--diagnostic-format"),
+                non_unicode("json"),
+            ],
+            "invalid diagnostic format `json\u{FFFD}`",
+        ),
+    ] {
+        let output = pinguer_os(&args);
+        // Before `args_os`, these panicked with exit status 101.
+        assert_eq!(output.status.code(), Some(2), "{args:?}");
+        assert!(
+            stderr(&output).contains(message),
+            "{args:?}: {}",
+            stderr(&output)
+        );
+    }
+}
+
+#[test]
+fn non_unicode_path_to_a_missing_file_is_reported() {
+    let output = pinguer_os(&[
+        OsString::from("debug"),
+        OsString::from("tokens"),
+        non_unicode("missing"),
+    ]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        stderr(&output).starts_with("error[P0001]: cannot load `missing\u{FFFD}`: "),
+        "{}",
+        stderr(&output)
+    );
+}
+
+// macOS file systems require file names to be valid UTF-8.
+#[cfg(any(windows, target_os = "linux"))]
+#[test]
+fn file_names_that_are_not_unicode_can_be_read() {
+    let dir = TempDir::new("non-unicode-name");
+    let path = dir.0.join(non_unicode("source"));
+    std::fs::write(&path, "let x = 1\n").unwrap();
+    let output = pinguer_os(&[
+        OsString::from("debug"),
+        OsString::from("tokens"),
+        path.into(),
+    ]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(stdout(&output).starts_with("1:1\tKeyword(Let)\t\"let\"\n"));
 }
 
 #[test]

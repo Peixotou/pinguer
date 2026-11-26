@@ -58,6 +58,11 @@ dependency resolver, build caching and cross-compilation
   from standard input (`-`) is not supported, and a file whose name starts
   with `-` must be written with a path prefix (`./-name.pgr`). There is no
   `--` end-of-options marker yet.
+* Arguments are read as operating-system strings. A file name that is not
+  valid Unicode (bytes that are not UTF-8 on Linux, an unpaired surrogate on
+  Windows) is passed to the operating system unchanged. Anywhere a command,
+  option or option value is expected, such an argument is a usage error
+  (status 2), and messages show its invalid parts as U+FFFD.
 
 ## 4. Exit status
 
