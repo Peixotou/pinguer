@@ -133,6 +133,10 @@ fn forbidden_control_name(c: char) -> (&'static str, bool) {
     }
 }
 
+/// The note explaining the form of a Unicode escape.
+const UNICODE_ESCAPE_FORM: &str =
+    "a Unicode escape is `\\u{` followed by one to six hexadecimal digits and `}`";
+
 fn is_ident_continue(c: char) -> bool {
     c == '_' || c.is_ascii_alphanumeric()
 }
@@ -662,11 +666,29 @@ impl Lexer<'_> {
         }
         let digits_end = self.pos;
         if !self.eat('}') {
-            invalid(
-                self,
-                "unterminated Unicode escape".to_owned(),
-                "close the escape with `}`",
-            );
+            match self.escape_close() {
+                // Closed later: the escape contains a character that is not a
+                // hexadecimal digit. Point at it and resume after the `}`.
+                Some(close) => {
+                    let c = self.peek().expect("a closing brace follows");
+                    let span = self.span(self.pos, self.pos + c.len_utf8());
+                    self.report(
+                        Diagnostic::error(format!(
+                            "invalid character `{}` in Unicode escape",
+                            c.escape_debug()
+                        ))
+                        .with_code(codes::INVALID_ESCAPE)
+                        .with_primary(span, "not a hexadecimal digit")
+                        .with_note(UNICODE_ESCAPE_FORM),
+                    );
+                    self.pos = close + 1;
+                }
+                None => invalid(
+                    self,
+                    "unterminated Unicode escape".to_owned(),
+                    "close the escape with `}`",
+                ),
+            }
             return;
         }
         let digits = &self.text[digits_start..digits_end];
@@ -685,15 +707,35 @@ impl Lexer<'_> {
         } else {
             let value = u32::from_str_radix(digits, 16).expect("at most six hex digits");
             if char::from_u32(value).is_none() {
+                let message = if value <= 0xDFFF {
+                    format!("`{value:X}` is a surrogate code point, not a Unicode scalar value")
+                } else {
+                    format!("`{value:X}` is above the largest Unicode scalar value, `10FFFF`")
+                };
                 let span = self.span(start, self.pos);
                 self.report(
-                    Diagnostic::error(format!("`{value:X}` is not a Unicode scalar value"))
+                    Diagnostic::error(message)
                         .with_code(codes::INVALID_ESCAPE)
                         .with_primary(span, "invalid Unicode escape")
-                        .with_note("surrogates (D800 to DFFF) and values above 10FFFF are not Unicode scalar values"),
+                        .with_note("Unicode scalar values are 0 to D7FF and E000 to 10FFFF"),
                 );
             }
         }
+    }
+
+    /// Returns the offset of the `}` that closes the Unicode escape being
+    /// read, if one follows before the literal, the line or another escape
+    /// ends. Scanning stops at the first `"`, `'` or `\`, so every character
+    /// of a literal is scanned a bounded number of times.
+    fn escape_close(&self) -> Option<usize> {
+        for (offset, c) in self.rest().char_indices() {
+            match c {
+                '}' => return Some(self.pos + offset),
+                '"' | '\'' | '\\' | '\n' | '\r' => return None,
+                _ => {}
+            }
+        }
+        None
     }
 
     fn number(&mut self) {

@@ -228,9 +228,11 @@ forbidden characters of section 3.
 * A string literal cannot contain a raw line break. A string that is not
   closed before the end of the line is an error (`P1002`); the lexer resumes
   at the next line.
-* Any other escape, an escape with no or more than six digits, a missing
-  brace, and a value that is a surrogate (U+D800–U+DFFF) or above U+10FFFF
-  are errors (`P1005`).
+* Any other escape, an escape with no or more than six digits, a character
+  other than a hexadecimal digit inside the braces, a missing brace, and a
+  value that is a surrogate (U+D800–U+DFFF) or above U+10FFFF are errors
+  (`P1005`). A brace counts as missing when no `}` follows before the end of
+  the line, the next quote or the next backslash.
 
 **Proposal:** multi-line strings and raw strings.
 

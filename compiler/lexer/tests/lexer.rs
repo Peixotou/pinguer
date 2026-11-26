@@ -500,6 +500,72 @@ fn invalid_unicode_escapes_are_reported() {
 }
 
 #[test]
+fn unicode_escape_problems_get_distinct_messages() {
+    for (source, labelled, message) in [
+        (
+            r#""\u{12G4}""#,
+            "G",
+            "invalid character `G` in Unicode escape",
+        ),
+        (r#""\u{G}""#, "G", "invalid character `G` in Unicode escape"),
+        (
+            r#""\u{41 }""#,
+            " ",
+            "invalid character ` ` in Unicode escape",
+        ),
+        (r"'\u{4x}'", "x", "invalid character `x` in Unicode escape"),
+        (r#""\u{41""#, r"\u{41", "unterminated Unicode escape"),
+        (r#""\u{41 x""#, r"\u{41", "unterminated Unicode escape"),
+        (
+            r#""\u{D800}""#,
+            r"\u{D800}",
+            "`D800` is a surrogate code point, not a Unicode scalar value",
+        ),
+        (
+            r#""\u{110000}""#,
+            r"\u{110000}",
+            "`110000` is above the largest Unicode scalar value, `10FFFF`",
+        ),
+    ] {
+        let lexed = lex(source);
+        assert_eq!(lexed.codes(), ["P1005"], "{source}");
+        assert_eq!(lexed.labelled(), [labelled], "{source}");
+        assert_eq!(lexed.diagnostics[0].message, message, "{source}");
+        assert_eq!(lexed.kinds().len(), 1, "{source}");
+    }
+}
+
+#[test]
+fn only_an_unterminated_unicode_escape_suggests_closing_it() {
+    let invalid_digit = lex(r#""\u{12G4}""#);
+    assert!(invalid_digit.diagnostics[0].help.is_empty());
+    assert!(invalid_digit.diagnostics[0].notes[0].contains("hexadecimal digits"));
+    let unterminated = lex(r#""\u{12""#);
+    assert_eq!(
+        unterminated.diagnostics[0].help,
+        ["close the escape with `}`"]
+    );
+}
+
+#[test]
+fn literal_continues_after_an_escape_with_an_invalid_character() {
+    let lexed = lex(r#""\u{1G}a\q" x"#);
+    assert_eq!(lexed.codes(), ["P1005", "P1005"]);
+    assert_eq!(lexed.labelled(), ["G", r"\q"]);
+    assert_eq!(lexed.kinds(), vec![T::String, T::Ident]);
+}
+
+#[test]
+fn many_unterminated_unicode_escapes_are_scanned_once() {
+    // Looking for a closing brace stops at the next backslash, so this input
+    // is lexed in linear time.
+    let source = format!("\"{}\"", r"\u{1".repeat(50_000));
+    let (tokens, diagnostics) = lex_limited(&source, 10);
+    assert_eq!(tokens.len(), 2);
+    assert_eq!(diagnostics.error_count(), 50_000);
+}
+
+#[test]
 fn unterminated_string_stops_at_end_of_line() {
     let lexed = lex("let s = \"abc\r\nnext");
     assert_eq!(lexed.codes(), ["P1002"]);
