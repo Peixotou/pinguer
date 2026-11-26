@@ -249,10 +249,12 @@ impl SourceFile {
             self.name
         );
         let start = self.line_starts[line - 1] as usize;
-        let mut end = self
-            .line_starts
-            .get(line)
-            .map_or(self.text.len(), |&next| next as usize - 1);
+        let Some(&next) = self.line_starts.get(line) else {
+            // The last line has no terminator; a carriage return at its end
+            // is a lone carriage return and part of the line's content.
+            return start..self.text.len();
+        };
+        let mut end = next as usize - 1;
         if end > start && self.text.as_bytes()[end - 1] == b'\r' {
             end -= 1;
         }
@@ -598,6 +600,18 @@ mod tests {
         let file = map.file(id);
         assert_eq!(file.line_count(), 1);
         assert_eq!(file.line_col(2), lc(1, 3));
+    }
+
+    #[test]
+    fn only_a_line_terminator_is_removed_from_line_text() {
+        let (map, id) = single("ab\r\ncd\r\r\nef\r");
+        let file = map.file(id);
+        assert_eq!(file.line_text(1), "ab");
+        // A lone carriage return before a CRLF terminator is content.
+        assert_eq!(file.line_text(2), "cd\r");
+        // So is a lone carriage return at the end of the file.
+        assert_eq!(file.line_text(3), "ef\r");
+        assert_eq!(file.line_range(3), 9..12);
     }
 
     #[test]

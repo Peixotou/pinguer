@@ -523,6 +523,17 @@ error: example
     }
 
     #[test]
+    fn lone_carriage_return_at_end_of_file_is_shown() {
+        let (map, file) = setup("cr.pgr", "ab\r");
+        let diagnostic = Diagnostic::error("cr").with_primary(Span::new(file, 2, 3), "here");
+        let rendered = render(&map, &diagnostic);
+        assert!(
+            rendered.contains("1 | ab<U+000D>\n  |   ^^^^^^^^ here\n"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
     fn empty_span_at_end_of_file_renders_one_marker() {
         let (map, file) = setup("e.pgr", "abc");
         let diagnostic = Diagnostic::error("eof").with_primary(Span::new(file, 3, 3), "");
