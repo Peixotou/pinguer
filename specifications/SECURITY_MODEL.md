@@ -43,9 +43,16 @@ concern).
   (Unicode TS #39).
 * **Lone carriage returns** are rejected, so that all tools agree on line
   boundaries.
-* Invisible characters inside string literals remain allowed, except the
-  bidirectional controls above. **Proposal:** a lint for zero-width and other
-  invisible characters in literals, suggesting escapes.
+* **Control characters and Unicode line separators** (all controls except
+  tab and line breaks, including vertical tab, form feed and next line, plus
+  U+2028 and U+2029) are rejected everywhere in source files
+  ([LEXICAL_STRUCTURE.md §3.2](LEXICAL_STRUCTURE.md#32-control-characters-and-unicode-line-separators),
+  [ADR-0024](../docs/adr/0024-control-characters-and-line-separators.md)):
+  other tools may show them as line breaks or interpret them, which would let
+  displayed code differ from compiled code.
+* Other invisible characters inside comments and string literals remain
+  allowed. **Proposal:** a lint for zero-width and other invisible
+  characters in literals, suggesting escapes.
 
 ## 4. Supply chain
 

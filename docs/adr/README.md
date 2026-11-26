@@ -15,7 +15,7 @@ supersedes an earlier one.
 | [0006](0006-v0-1-memory-model.md) | v0.1 memory model: value semantics without allocation | Accepted |
 | [0007](0007-checked-arithmetic-and-explicit-conversions.md) | Checked arithmetic and explicit conversions | Accepted |
 | [0008](0008-diagnostic-codes-and-formats.md) | Diagnostic codes and output formats | Accepted |
-| [0009](0009-ascii-identifiers-and-bidi-rejection.md) | ASCII identifiers and rejection of bidirectional controls | Accepted |
+| [0009](0009-ascii-identifiers-and-bidi-rejection.md) | ASCII identifiers and rejection of bidirectional controls | Accepted, extended by 0024 |
 | [0010](0010-cli-exposes-only-implemented-commands.md) | The CLI exposes only implemented commands | Accepted |
 | [0011](0011-composition-and-interfaces-without-class-inheritance.md) | Composition and interfaces without class inheritance | Accepted |
 | [0012](0012-visibility-public-and-private.md) | Visibility with `public` and `private` | Accepted |
@@ -30,6 +30,7 @@ supersedes an earlier one.
 | [0021](0021-fundamental-library-functions.md) | Fundamental library functions | Accepted |
 | [0022](0022-feature-classification.md) | Feature classification and the version matrix | Accepted |
 | [0023](0023-no-placeholder-directories.md) | No placeholder directories | Accepted |
+| [0024](0024-control-characters-and-line-separators.md) | Rejection of control characters and Unicode line separators | Accepted |
 
 ## Template
 

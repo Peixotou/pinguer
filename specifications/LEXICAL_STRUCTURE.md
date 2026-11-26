@@ -29,8 +29,17 @@ values.
 
 ## 3. Forbidden characters
 
-The following characters are rejected anywhere in a source file, including
-inside comments, string literals and character literals (`P1009`):
+The characters of this section are rejected anywhere in a source file,
+including inside comments, string literals and character literals. The rule
+applies to characters written directly in the file: a literal that needs one
+of them writes it as an escape sequence (section 5.5), and characters produced
+by escapes are not restricted. Outside comments and literals, each forbidden
+character is reported once, with the code given below, and produces one
+`Unknown` token.
+
+### 3.1 Bidirectional formatting characters
+
+Reported with `P1009`:
 
 | Code points | Name |
 |---|---|
@@ -44,11 +53,37 @@ order the compiler reads, which has been used to disguise malicious code
 (CVE-2021-42574, "Trojan Source"). A program that needs one of them in a
 string writes it as an escape sequence, for example `"\u{202E}"`.
 
+### 3.2 Control characters and Unicode line separators
+
+Reported with `P1012`
+([ADR-0024](../docs/adr/0024-control-characters-and-line-separators.md)):
+
+| Code points | Name |
+|---|---|
+| U+0000 – U+0008 | C0 control characters before horizontal tab |
+| U+000B, U+000C | Vertical tab, form feed |
+| U+000E – U+001F | Other C0 control characters, including escape (U+001B) |
+| U+007F | Delete |
+| U+0080 – U+009F | C1 control characters, including next line (U+0085) |
+| U+2028, U+2029 | Line separator, paragraph separator |
+
+Horizontal tab (U+0009) and line feed (U+000A) are allowed. Carriage return
+(U+000D) is allowed only before a line feed (section 2, `P1010`).
+
+Vertical tab, form feed, next line and the two separators end a line in some
+editors, terminals and libraries, but not in Pinguer. Accepting them would let
+text that the compiler reads as part of a comment or literal be displayed as a
+separate line of code. The other control characters are invisible in most
+editors, and terminals interpret some of them (escape sequences can move the
+cursor and erase text), so they could hide or rewrite the displayed code. A
+literal writes them as escapes, for example `"\u{2028}"` or `"\u{1B}"`.
+
 ## 4. Whitespace and comments
 
 * Whitespace is space (U+0020), horizontal tab (U+0009) and line breaks. Any
   other character, including other Unicode whitespace such as U+00A0, is an
-  error when it appears outside a comment or literal (`P1001`).
+  error when it appears outside a comment or literal (`P1001`, or the code of
+  section 3 for a forbidden character).
 * A line comment starts with `//` and extends to the end of the line. `///`
   starts an ordinary line comment in v0.1; documentation comments are a
   **Proposal**.
@@ -176,7 +211,8 @@ escape         = "\" , ( "n" | "r" | "t" | "\" | "0" | '"' | "'" )
                  [ hex_digit ] , [ hex_digit ] , [ hex_digit ] , "}" ;
 ```
 
-`string_char` is any Unicode scalar value except `"`, `\` and line breaks.
+`string_char` is any Unicode scalar value except `"`, `\`, line breaks and the
+forbidden characters of section 3.
 
 | Escape | Meaning |
 |---|---|
@@ -211,7 +247,8 @@ later would silently change the meaning of existing programs.
 char_literal = "'" , ( char_char | escape ) , "'" ;
 ```
 
-`char_char` is any Unicode scalar value except `'`, `\` and line breaks.
+`char_char` is any Unicode scalar value except `'`, `\`, line breaks and the
+forbidden characters of section 3.
 
 * A character literal contains exactly one Unicode scalar value (`P1008`).
   A user-perceived character made of several scalar values, such as `e`
@@ -276,6 +313,7 @@ tokens covering the offending text, so that parsing can continue:
 | Error | Recovery |
 |---|---|
 | Unknown character | One `Unknown` token per character. |
+| Control character or line separator (section 3.2) outside a comment or literal | One `Unknown` token per character. |
 | Malformed numeric literal | One literal token covering the whole malformed literal, including any suffix. |
 | Unterminated string or character literal | A literal token up to the end of the line. |
 | Invalid escape | The literal continues after the escape. |
@@ -304,3 +342,4 @@ with or without a limit.
 | P1009 | Bidirectional formatting character |
 | P1010 | Lone carriage return |
 | P1011 | Non-ASCII identifier |
+| P1012 | Control character or Unicode line separator |
