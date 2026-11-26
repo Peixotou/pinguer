@@ -244,7 +244,7 @@ forbidden characters of section 3.
   other than a hexadecimal digit inside the braces, a missing brace, and a
   value that is a surrogate (U+D800–U+DFFF) or above U+10FFFF are errors
   (`P1005`). A brace counts as missing when no `}` follows before the end of
-  the line, the next quote or the next backslash.
+  the line, the quote that closes the literal or the next backslash.
 
 **Proposal:** multi-line strings and raw strings.
 

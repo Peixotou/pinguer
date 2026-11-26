@@ -539,7 +539,7 @@ impl Lexer<'_> {
                     self.bump();
                     break;
                 }
-                Some('\\') => self.escape(),
+                Some('\\') => self.escape('"'),
                 _ => {
                     self.bump();
                 }
@@ -570,7 +570,7 @@ impl Lexer<'_> {
                     break;
                 }
                 Some('\\') => {
-                    self.escape();
+                    self.escape('\'');
                     characters += 1;
                 }
                 _ => {
@@ -605,10 +605,10 @@ impl Lexer<'_> {
         self.push(TokenKind::Char, start, self.pos);
     }
 
-    /// Reads an escape sequence starting at a `\`. Leaves a line break after
-    /// the backslash unconsumed so that the caller reports the unterminated
-    /// literal.
-    fn escape(&mut self) {
+    /// Reads an escape sequence starting at a `\` inside a literal delimited
+    /// by `quote`. Leaves a line break after the backslash unconsumed so that
+    /// the caller reports the unterminated literal.
+    fn escape(&mut self, quote: char) {
         let start = self.pos;
         self.bump();
         match self.peek() {
@@ -617,7 +617,7 @@ impl Lexer<'_> {
             }
             Some('u') => {
                 self.bump();
-                self.unicode_escape(start);
+                self.unicode_escape(start, quote);
             }
             _ if self.at_line_end() => {}
             // A lone carriage return or a forbidden control character is
@@ -641,8 +641,8 @@ impl Lexer<'_> {
     }
 
     /// Reads the part of a `\u{...}` escape after the `u`. `start` is the
-    /// offset of the backslash.
-    fn unicode_escape(&mut self, start: usize) {
+    /// offset of the backslash and `quote` the literal's delimiter.
+    fn unicode_escape(&mut self, start: usize, quote: char) {
         let invalid = |lexer: &mut Self, message: String, help: &str| {
             let span = lexer.span(start, lexer.pos);
             let mut diagnostic = Diagnostic::error(message)
@@ -668,7 +668,7 @@ impl Lexer<'_> {
         }
         let digits_end = self.pos;
         if !self.eat('}') {
-            match self.escape_close() {
+            match self.escape_close(quote) {
                 // Closed later: the escape contains a character that is not a
                 // hexadecimal digit. Point at it and resume after the `}`.
                 Some(close) => {
@@ -727,13 +727,15 @@ impl Lexer<'_> {
 
     /// Returns the offset of the `}` that closes the Unicode escape being
     /// read, if one follows before the literal, the line or another escape
-    /// ends. Scanning stops at the first `"`, `'` or `\`, so every character
-    /// of a literal is scanned a bounded number of times.
-    fn escape_close(&self) -> Option<usize> {
+    /// ends. Scanning stops at the literal's closing `quote` (the other quote
+    /// character is ordinary text there) or at the next `\`, so every
+    /// character of a literal is scanned a bounded number of times.
+    fn escape_close(&self, quote: char) -> Option<usize> {
         for (offset, c) in self.rest().char_indices() {
             match c {
                 '}' => return Some(self.pos + offset),
-                '"' | '\'' | '\\' | '\n' | '\r' => return None,
+                '\\' | '\n' | '\r' => return None,
+                c if c == quote => return None,
                 _ => {}
             }
         }

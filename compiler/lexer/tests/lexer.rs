@@ -558,6 +558,18 @@ fn unicode_escape_problems_get_distinct_messages() {
             "invalid character ` ` in Unicode escape",
         ),
         (r"'\u{4x}'", "x", "invalid character `x` in Unicode escape"),
+        // The other quote character is ordinary text inside a literal.
+        (
+            r#""\u{1'2}""#,
+            "'",
+            "invalid character `\\'` in Unicode escape",
+        ),
+        (
+            r#"'\u{1"2}'"#,
+            "\"",
+            "invalid character `\\\"` in Unicode escape",
+        ),
+        (r"'\u{41'", r"\u{41", "unterminated Unicode escape"),
         (r#""\u{41""#, r"\u{41", "unterminated Unicode escape"),
         (r#""\u{41 x""#, r"\u{41", "unterminated Unicode escape"),
         (
