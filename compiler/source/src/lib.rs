@@ -15,7 +15,8 @@
 //!   lone `\r` does not (the lexer rejects lone carriage returns).
 
 use std::fmt;
-use std::io;
+use std::fs::{self, File};
+use std::io::{self, Read};
 use std::ops::Range;
 use std::path::Path;
 
@@ -275,6 +276,36 @@ fn count_char_starts(bytes: &[u8]) -> usize {
     bytes.iter().filter(|&&byte| byte & 0xC0 != 0x80).count()
 }
 
+/// Reads all of `reader` if it holds at most `limit` bytes of text after an
+/// optional byte order mark, without ever reading more than one byte past
+/// that. `size_hint` is the size the file system reports for a regular file:
+/// it sizes the buffer and rejects a file that is already known to be too
+/// large, but the limit holds even when the hint is wrong.
+fn read_bounded(
+    reader: impl Read,
+    size_hint: Option<u64>,
+    limit: usize,
+) -> Result<Vec<u8>, SourceError> {
+    let max_read = limit as u64 + BYTE_ORDER_MARK_UTF8.len() as u64;
+    if let Some(size) = size_hint
+        && size > max_read
+    {
+        return Err(SourceError::TooLarge { size: Some(size) });
+    }
+    let capacity = size_hint
+        .and_then(|size| usize::try_from(size).ok())
+        .unwrap_or(0);
+    let mut bytes = Vec::with_capacity(capacity);
+    reader
+        .take(max_read + 1)
+        .read_to_end(&mut bytes)
+        .map_err(SourceError::Io)?;
+    if bytes.len() as u64 > max_read {
+        return Err(SourceError::TooLarge { size: None });
+    }
+    Ok(bytes)
+}
+
 /// An error produced while registering or loading a source file.
 #[derive(Debug)]
 pub enum SourceError {
@@ -287,8 +318,10 @@ pub enum SourceError {
     },
     /// The file exceeds [`MAX_FILE_SIZE`].
     TooLarge {
-        /// Size of the file in bytes.
-        size: usize,
+        /// Size of the file in bytes, if known. It is unknown when the input
+        /// is not a regular file, for example a pipe, and reading stopped at
+        /// the limit.
+        size: Option<u64>,
     },
 }
 
@@ -302,10 +335,13 @@ impl fmt::Display for SourceError {
                     "file is not valid UTF-8 (invalid byte at offset {offset})"
                 )
             }
-            SourceError::TooLarge { size } => write!(
+            SourceError::TooLarge { size: Some(size) } => write!(
                 f,
                 "file is {size} bytes, which exceeds the maximum of {MAX_FILE_SIZE} bytes"
             ),
+            SourceError::TooLarge { size: None } => {
+                write!(f, "file exceeds the maximum of {MAX_FILE_SIZE} bytes")
+            }
         }
     }
 }
@@ -358,17 +394,36 @@ impl SourceMap {
     /// for invalid UTF-8 is relative to the text after it, like every other
     /// offset.
     ///
+    /// The file is never read past the size limit, whatever kind of file it
+    /// is: a pipe or device that produces endless data, or a file that grows
+    /// while it is read, stops being read one byte after the limit.
+    ///
     /// # Errors
     ///
     /// Returns an error if the file cannot be read, is not valid UTF-8 or is
     /// larger than [`MAX_FILE_SIZE`].
     pub fn load(&mut self, path: &Path) -> Result<FileId, SourceError> {
-        let mut bytes = std::fs::read(path).map_err(SourceError::Io)?;
+        self.load_with_limit(path, MAX_FILE_SIZE)
+    }
+
+    /// [`SourceMap::load`] with a configurable size limit, so that tests can
+    /// reach the limit without gigabytes of input.
+    fn load_with_limit(&mut self, path: &Path, limit: usize) -> Result<FileId, SourceError> {
+        let file = File::open(path).map_err(SourceError::Io)?;
+        // The size recorded by the file system is a hint only: it is
+        // meaningless for pipes and devices and can change during the read.
+        let size_hint = file
+            .metadata()
+            .ok()
+            .filter(fs::Metadata::is_file)
+            .map(|metadata| metadata.len());
+        let mut bytes = read_bounded(file, size_hint, limit)?;
+        let size = bytes.len() as u64;
         if bytes.starts_with(BYTE_ORDER_MARK_UTF8) {
             bytes.drain(..BYTE_ORDER_MARK_UTF8.len());
         }
-        if bytes.len() > MAX_FILE_SIZE {
-            return Err(SourceError::TooLarge { size: bytes.len() });
+        if bytes.len() > limit {
+            return Err(SourceError::TooLarge { size: Some(size) });
         }
         let text = String::from_utf8(bytes).map_err(|error| SourceError::InvalidUtf8 {
             offset: error.utf8_error().valid_up_to(),
@@ -379,7 +434,9 @@ impl SourceMap {
     /// Registers text whose byte order mark, if any, was already removed.
     fn insert(&mut self, name: String, text: String) -> Result<FileId, SourceError> {
         if text.len() > MAX_FILE_SIZE {
-            return Err(SourceError::TooLarge { size: text.len() });
+            return Err(SourceError::TooLarge {
+                size: Some(text.len() as u64),
+            });
         }
         let id = u32::try_from(self.files.len()).expect("more than u32::MAX source files");
         self.files.push(SourceFile::new(name, text));
@@ -626,6 +683,59 @@ mod tests {
         let added = map.add("added.pgr", "\u{FEFF}\u{FEFF}x").unwrap();
         assert_eq!(map.file(loaded).text(), "\u{FEFF}x");
         assert_eq!(map.file(loaded).text(), map.file(added).text());
+    }
+
+    #[test]
+    fn endless_sources_are_read_only_up_to_the_limit() {
+        // Like a pipe or a device that never ends. Without the bound this
+        // test would not terminate.
+        let error = read_bounded(io::repeat(b'x'), None, 1_000).unwrap_err();
+        assert!(
+            matches!(error, SourceError::TooLarge { size: None }),
+            "{error:?}"
+        );
+    }
+
+    #[test]
+    fn a_wrong_size_hint_does_not_lift_the_limit() {
+        // A file that grew after its size was read.
+        let error = read_bounded(&[b'x'; 20][..], Some(5), 10).unwrap_err();
+        assert!(matches!(error, SourceError::TooLarge { size: None }));
+        // A hint above the limit rejects the file without reading it.
+        let error = read_bounded(io::repeat(b'x'), Some(1 << 40), 10).unwrap_err();
+        assert!(matches!(
+            error,
+            SourceError::TooLarge {
+                size: Some(1_099_511_627_776)
+            }
+        ));
+    }
+
+    #[test]
+    fn files_up_to_the_limit_load_and_larger_ones_are_rejected() {
+        let mut map = SourceMap::new();
+        let exact = TempFile::new("limit-exact", b"0123456789");
+        assert!(map.load_with_limit(&exact.path, 10).is_ok());
+        // The byte order mark does not count toward the limit.
+        let marked = TempFile::new("limit-bom", b"\xEF\xBB\xBF0123456789");
+        let id = map.load_with_limit(&marked.path, 10).unwrap();
+        assert_eq!(map.file(id).text(), "0123456789");
+        for (test, contents) in [
+            ("limit-over", &b"0123456789a"[..]),
+            ("limit-far-over", b"0123456789abcdef"),
+        ] {
+            let file = TempFile::new(test, contents);
+            let error = map.load_with_limit(&file.path, 10).unwrap_err();
+            let size = contents.len() as u64;
+            assert!(
+                matches!(error, SourceError::TooLarge { size: Some(s) } if s == size),
+                "{test}: {error:?}"
+            );
+            assert_eq!(
+                error.to_string(),
+                format!("file is {size} bytes, which exceeds the maximum of {MAX_FILE_SIZE} bytes")
+            );
+        }
     }
 
     #[test]

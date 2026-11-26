@@ -39,8 +39,9 @@ suppressed diagnostics, which renderers print after the retained ones.
   change is correct only when the compiler knows it is; otherwise phrase it as
   a possibility.
 * Every diagnostic about the program being compiled (its files and source
-  text) has a code and a test. The only current exception is `P0003` (file
-  too large), whose trigger requires a 4 GiB input. Command-line usage errors
+  text) has a code and a test. `P0003` (file too large) is tested through
+  the source loader with a reduced limit; an end-to-end test would need a
+  4 GiB input. Command-line usage errors
   and "command not available" messages concern the invocation, not the
   program, and have no code.
 

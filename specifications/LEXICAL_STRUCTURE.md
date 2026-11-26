@@ -5,8 +5,8 @@ Implementation: `compiler/lexer` (crate `pinguer_lexer`) implements this
 document completely. The rules are covered by tests in
 `compiler/lexer/tests/`, except that UTF-8 validation and byte order mark
 removal are tested in `compiler/source` and `cli/tests`. The file size limit
-(`P0003`) has no automated test, because triggering it requires a 4 GiB
-input.
+(`P0003`) is tested in `compiler/source` through the same loading code with a
+lower limit, because reaching the real limit requires a 4 GiB input.
 
 ## 1. Source text
 
@@ -14,7 +14,10 @@ input.
   UTF-8 is rejected before lexing (diagnostic `P0002`).
 * A leading UTF-8 byte order mark (U+FEFF) is ignored. Byte offsets reported
   by the compiler are relative to the text after the byte order mark.
-* A source file may be at most 4 GiB − 1 byte long (`P0003`).
+* A source file may be at most 4 GiB − 1 byte long, not counting a byte
+  order mark (`P0003`). The compiler stops reading one byte past the limit,
+  so a pipe or device that produces more data, or a file that grows while it
+  is read, is rejected without being read to its end.
 * Source files use the extension `.pgr`.
 
 ## 2. Line breaks
