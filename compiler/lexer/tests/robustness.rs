@@ -156,6 +156,34 @@ fn random_characters_uphold_invariants() {
 }
 
 #[test]
+fn limited_lexing_reports_a_prefix_of_unlimited_lexing() {
+    for seed in 1..=2_000u64 {
+        let mut rng = Rng(seed.wrapping_mul(0xA24B_AED4_963E_E407) | 1);
+        let input = random_input(&mut rng);
+        let limit = 1 + rng.below(4);
+        let mut map = SourceMap::new();
+        let file = map.add("limit.pgr", input.as_str()).unwrap();
+        let text = map.file(file).text();
+
+        let mut unlimited = Diagnostics::new();
+        let tokens = tokenize(file, text, &mut unlimited);
+        let mut limited = Diagnostics::with_limit(limit);
+        let limited_tokens = tokenize(file, text, &mut limited);
+
+        let context = format!("seed {seed}, limit {limit}, input {text:?}");
+        assert_eq!(limited_tokens, tokens, "{context}");
+        let expected = &unlimited.as_slice()[..unlimited.len().min(limit)];
+        assert_eq!(limited.as_slice(), expected, "{context}");
+        assert_eq!(limited.error_count(), unlimited.error_count(), "{context}");
+        assert_eq!(
+            limited.suppressed_count(),
+            unlimited.len().saturating_sub(limit),
+            "{context}"
+        );
+    }
+}
+
+#[test]
 fn deeply_nested_block_comments() {
     let input = "/*".repeat(10_000) + &"*/".repeat(10_000) + "x";
     check_invariants(&input, 0);

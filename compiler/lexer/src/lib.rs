@@ -53,7 +53,7 @@ mod token;
 
 pub use token::{Keyword, Token, TokenKind};
 
-use pinguer_diagnostics::{Diagnostic, Diagnostics, codes};
+use pinguer_diagnostics::{Diagnostic, Diagnostics, Severity, codes};
 use pinguer_source::{FileId, MAX_FILE_SIZE, Span};
 
 /// Tokenizes `text`, which is the contents of `file`.
@@ -63,6 +63,10 @@ use pinguer_source::{FileId, MAX_FILE_SIZE, Span};
 /// reported to `diagnostics` in source order; for every problem the lexer
 /// still produces tokens covering the offending input, so later stages can
 /// continue.
+///
+/// If `diagnostics` has a limit, the lexer reports the diagnostics that come
+/// first in the source, up to the remaining capacity, and only counts the
+/// others. It never holds more than twice that many diagnostics in memory.
 ///
 /// # Panics
 ///
@@ -80,17 +84,19 @@ pub fn tokenize(file: FileId, text: &str, diagnostics: &mut Diagnostics) -> Vec<
         pos: 0,
         tokens: Vec::new(),
         diagnostics: Vec::new(),
+        capacity: diagnostics.remaining_capacity().unwrap_or(usize::MAX),
+        discarded: 0,
         delimiters: Vec::new(),
         pending_newline: None,
     };
     lexer.check_text_flow();
     lexer.run();
 
-    let mut reported = lexer.diagnostics;
-    reported.sort_by_key(|diagnostic| diagnostic.main_label().map(|label| label.span.start));
-    for diagnostic in reported {
+    lexer.keep_earliest_diagnostics();
+    for diagnostic in lexer.diagnostics {
         diagnostics.push(diagnostic);
     }
+    diagnostics.record_suppressed(Severity::Error, lexer.discarded);
     lexer.tokens
 }
 
@@ -137,7 +143,13 @@ struct Lexer<'a> {
     text: &'a str,
     pos: usize,
     tokens: Vec<Token>,
+    /// Diagnostics found so far, in the order they were found. Reduced to
+    /// the `capacity` earliest in the source whenever it reaches twice that.
     diagnostics: Vec<Diagnostic>,
+    /// How many diagnostics `tokenize` may hand over.
+    capacity: usize,
+    /// Errors dropped because `capacity` earlier ones were already found.
+    discarded: usize,
     /// Currently open delimiters. Used only to decide whether line breaks are
     /// significant; mismatched delimiters are reported by the parser.
     delimiters: Vec<Delimiter>,
@@ -179,8 +191,28 @@ impl Lexer<'_> {
         }
     }
 
+    /// Records an error. The lexer reports nothing but errors, which is what
+    /// `discarded` counts.
     fn report(&mut self, diagnostic: Diagnostic) {
+        debug_assert_eq!(diagnostic.severity, Severity::Error);
         self.diagnostics.push(diagnostic);
+        if self.diagnostics.len() >= self.capacity.saturating_mul(2) {
+            self.keep_earliest_diagnostics();
+        }
+    }
+
+    /// Sorts the diagnostics by source position and drops all but the first
+    /// `capacity`. The sort is stable, so diagnostics at the same position
+    /// keep the order in which they were found; repeated reduction therefore
+    /// keeps exactly the diagnostics that sorting everything at the end
+    /// would keep.
+    fn keep_earliest_diagnostics(&mut self) {
+        self.diagnostics
+            .sort_by_key(|diagnostic| diagnostic.main_label().map(|label| label.span.start));
+        if self.diagnostics.len() > self.capacity {
+            self.discarded += self.diagnostics.len() - self.capacity;
+            self.diagnostics.truncate(self.capacity);
+        }
     }
 
     /// Returns the end of the current line's content: the current position,

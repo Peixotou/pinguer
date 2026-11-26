@@ -282,7 +282,10 @@ tokens covering the offending text, so that parsing can continue:
 | Unterminated block comment | The comment extends to the end of the file. |
 | Non-ASCII identifier | One identifier token. |
 
-Diagnostics are reported in source order.
+Diagnostics are reported in source order. When the compilation limits the
+number of reported diagnostics, the lexer reports the ones that come first in
+the source and counts the rest; recovery and the token stream are the same
+with or without a limit.
 
 ## 8. Diagnostic codes
 

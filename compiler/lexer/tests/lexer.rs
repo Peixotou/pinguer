@@ -817,6 +817,50 @@ fn lexing_continues_after_errors() {
     assert_eq!(lexed.kinds().last(), Some(&kw(Keyword::Func)));
 }
 
+// Diagnostic limit
+
+fn lex_limited(text: &str, limit: usize) -> (Vec<Token>, Diagnostics) {
+    let mut map = SourceMap::new();
+    let file = map.add("limited.pgr", text).unwrap();
+    let mut diagnostics = Diagnostics::with_limit(limit);
+    let tokens = tokenize(file, map.file(file).text(), &mut diagnostics);
+    (tokens, diagnostics)
+}
+
+#[test]
+fn diagnostics_beyond_the_limit_are_counted_but_not_stored() {
+    let (tokens, diagnostics) = lex_limited(&"$".repeat(10_000), 10);
+    // Recovery is unaffected: one token per character, then end of file.
+    assert_eq!(tokens.len(), 10_001);
+    assert_eq!(diagnostics.len(), 10);
+    assert_eq!(diagnostics.error_count(), 10_000);
+    assert_eq!(diagnostics.suppressed_count(), 9_990);
+    let starts: Vec<u32> = diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.main_label().unwrap().span.start)
+        .collect();
+    assert_eq!(starts, (0..10).collect::<Vec<u32>>());
+}
+
+#[test]
+fn limit_keeps_the_earliest_diagnostics_in_source_order() {
+    // The bidirectional character is found by the first pass, the unknown
+    // characters by the second; the unterminated string is reported after
+    // the invalid escape inside it, although it starts earlier.
+    let source = "a\u{202E} $ \"\\q $";
+    let unlimited = lex(source);
+    assert_eq!(unlimited.codes(), ["P1009", "P1001", "P1002", "P1005"]);
+    for limit in 1..=4 {
+        let (_, limited) = lex_limited(source, limit);
+        let codes: Vec<String> = limited
+            .iter()
+            .map(|diagnostic| diagnostic.code.unwrap().to_string())
+            .collect();
+        assert_eq!(codes, unlimited.codes()[..limit], "limit {limit}");
+        assert_eq!(limited.error_count(), 4, "limit {limit}");
+    }
+}
+
 // Regression tests
 
 #[test]
