@@ -84,7 +84,7 @@ Each item has documented options and a recommendation; none is adopted yet.
 |---|---|---|---|
 | C4 | Spell the unit type `void`? | Yes: `void` as the prelude name of `()` | [TYPE_SYSTEM §12](TYPE_SYSTEM.md#12-unresolved-questions) |
 | C5 | `float` as an alias of `f64`? | Yes, like `int` | [TYPE_SYSTEM §12](TYPE_SYSTEM.md#12-unresolved-questions) |
-| C6 | String interpolation syntax | `"${expr}"`; must be decided **before v0.1.0** | [LEXICAL_STRUCTURE §5.5](LEXICAL_STRUCTURE.md#55-string-literals) |
+| C6 | String interpolation syntax | `"${expr}"`; must be decided **before v0.1.0** | [LEXICAL_STRUCTURE §5.5](LEXICAL_STRUCTURE.md#55-string-literals), [ADR-0025](../docs/adr/0025-string-interpolation-syntax.md) |
 | C7 | Closure syntax `x => expr` | Yes | [FUNCTIONAL_PROGRAMMING §2](FUNCTIONAL_PROGRAMMING.md#2-closures-unresolved) |
 | C9 | Prelude with `print`, `println`, `assert`, `panic` | Yes, from v0.1 | [STANDARD_LIBRARY §1](STANDARD_LIBRARY.md#1-layering-and-prelude) |
 | C11 | `module` declaration and `export` keyword | Neither: module = file, visibility = `public` | [MODULE_SYSTEM §2.2](MODULE_SYSTEM.md#22-file-based-modules) |

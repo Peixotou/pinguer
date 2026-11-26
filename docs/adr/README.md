@@ -31,6 +31,7 @@ supersedes an earlier one.
 | [0022](0022-feature-classification.md) | Feature classification and the version matrix | Accepted |
 | [0023](0023-no-placeholder-directories.md) | No placeholder directories | Accepted |
 | [0024](0024-control-characters-and-line-separators.md) | Rejection of control characters and Unicode line separators | Accepted |
+| [0025](0025-string-interpolation-syntax.md) | String interpolation syntax | Proposed |
 
 ## Template
 

@@ -77,6 +77,6 @@ Order is tentative and depends on design validation:
 | Concurrency model | Async features | Prototype and ADR ([CONCURRENCY_MODEL.md](specifications/CONCURRENCY_MODEL.md)) |
 | Explicit generic argument syntax | Generics | ADR together with the generics design |
 | Coverage-guided fuzzing | v0.1.0 release | `cargo-fuzz` targets for lexer and parser (Phase 05) |
-| String interpolation syntax (C6) | v0.1.0 release: the chosen sequence must be reserved in v0.1 string literals | Maintainer decision; see [FEATURE_MATRIX.md §5](specifications/FEATURE_MATRIX.md#5-pending-decisions) |
+| String interpolation syntax (C6) | v0.1.0 release, if the chosen syntax gives a meaning to text that is valid in v0.1 string literals: that text must be rejected first | Maintainer decision; options and consequences in [ADR-0025](docs/adr/0025-string-interpolation-syntax.md) |
 | Other pending syntax decisions (C4, C5, C7, C9, C11, C12) | Their target versions | Maintainer decisions; same table |
 | `actions/checkout` pinned by tag rather than commit SHA | Supply-chain hardening | Pin by SHA together with automated update tooling |

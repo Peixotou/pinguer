@@ -253,7 +253,11 @@ forbidden characters of section 3.
 changes the meaning of characters that are ordinary text in v0.1 string
 literals, so the chosen sequence must be rejected (or required to be escaped)
 in v0.1 literals before v0.1.0 is released; otherwise adding interpolation
-later would silently change the meaning of existing programs.
+later would silently change the meaning of existing programs. The options
+and their consequences, including forms that need no reservation (a prefixed
+literal such as `f"…"`, or an escape such as `\(…)`, which v0.1 already
+rejects), are recorded in
+[ADR-0025](../docs/adr/0025-string-interpolation-syntax.md).
 
 ### 5.6 Character literals
 
