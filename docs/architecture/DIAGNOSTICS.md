@@ -119,7 +119,7 @@ on its own line, written to standard error.
 Within `format_version` 1, fields may be added but never removed or changed.
 Strings escape the same characters as the human format, as `\uXXXX`;
 characters outside the Basic Multilingual Plane are escaped as a UTF-16
-surrogate pair (`󠁁` for U+E0041), as RFC 8259 requires.
+surrogate pair (`\udb40\udc41` for U+E0041), as RFC 8259 requires.
 
 ## 5. Code registry
 
