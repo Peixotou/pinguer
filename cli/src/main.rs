@@ -13,6 +13,15 @@ use pinguer_source::{SourceError, SourceMap};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// The number of diagnostics one invocation reports.
+///
+/// One hundred is enough to fix many independent problems in one run (it is
+/// also the default of `javac -Xmaxerrs`), while bounding the output and the
+/// memory spent on diagnostics when an input produces millions of them.
+/// Further diagnostics are counted, included in the error count and
+/// summarized by one `P0004` note.
+const DIAGNOSTIC_LIMIT: usize = 100;
+
 /// Process exit statuses. Documented in `docs/architecture/CLI.md`.
 mod status {
     /// The command succeeded.
@@ -63,9 +72,11 @@ impl Output {
         if diagnostics.is_empty() {
             return;
         }
+        let notice = diagnostics.suppression_notice();
+        let reported = diagnostics.iter().chain(notice.as_ref());
         match format {
             DiagnosticFormat::Human => {
-                let mut text = human::render_all(map, diagnostics);
+                let mut text = human::render_all(map, reported);
                 let errors = diagnostics.error_count();
                 if errors > 0 {
                     let plural = if errors == 1 { "" } else { "s" };
@@ -75,7 +86,7 @@ impl Output {
                 }
                 self.err(&text);
             }
-            DiagnosticFormat::Json => self.err(&json::render_all(map, diagnostics)),
+            DiagnosticFormat::Json => self.err(&json::render_all(map, reported)),
         }
     }
 
@@ -218,7 +229,7 @@ fn debug_tokens(args: &[String], output: &mut Output) -> u8 {
     };
 
     let mut map = SourceMap::new();
-    let mut diagnostics = Diagnostics::new();
+    let mut diagnostics = Diagnostics::with_limit(DIAGNOSTIC_LIMIT);
     let file = match map.load(Path::new(path)) {
         Ok(file) => file,
         Err(error) => {

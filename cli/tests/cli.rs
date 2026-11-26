@@ -26,6 +26,29 @@ fn stderr(output: &Output) -> String {
     String::from_utf8(output.stderr.clone()).expect("stderr is UTF-8")
 }
 
+/// A temporary directory, unique to one test, removed when dropped.
+struct TempDir(PathBuf);
+
+impl TempDir {
+    fn new(test: &str) -> Self {
+        let path = std::env::temp_dir().join(format!("pinguer-cli-{test}-{}", std::process::id()));
+        std::fs::create_dir_all(&path).unwrap();
+        Self(path)
+    }
+
+    fn file(&self, name: &str, contents: &[u8]) -> PathBuf {
+        let path = self.0.join(name);
+        std::fs::write(&path, contents).unwrap();
+        path
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 #[test]
 fn version_flags_print_the_version() {
     for flag in ["version", "--version", "-V"] {
@@ -203,6 +226,57 @@ fn debug_tokens_emits_json_diagnostics() {
     assert!(lines[0].starts_with(r#"{"format_version":1,"severity":"error","code":"P1002""#));
     assert!(lines[1].contains(r#""code":"P1006""#));
     assert!(lines[1].contains(r#""line_start":3,"column_start":21"#));
+}
+
+#[test]
+fn diagnostics_beyond_the_limit_are_summarized() {
+    let dir = TempDir::new("limit-human");
+    let path = dir.file("dollars.pgr", "$".repeat(10_000).as_bytes());
+    let output = pinguer(&["debug", "tokens", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    let text = stderr(&output);
+    assert_eq!(text.matches("error[P1001]").count(), 100, "{text}");
+    assert!(
+        text.ends_with(
+            "note[P0004]: 9900 more diagnostics not shown\n  \
+             = note: at most 100 diagnostics are reported in one compilation\n\n\
+             error: aborting due to 10000 previous errors\n"
+        ),
+        "{text}"
+    );
+    // Before the limit and the excerpt cut, this input printed 152 MB.
+    assert!(text.len() < 100_000, "{} bytes", text.len());
+    // Every token is still listed.
+    assert_eq!(stdout(&output).lines().count(), 10_001);
+}
+
+#[test]
+fn json_diagnostics_beyond_the_limit_are_summarized() {
+    let dir = TempDir::new("limit-json");
+    let path = dir.file("dollars.pgr", "$\n".repeat(500).as_bytes());
+    let output = pinguer(&[
+        "debug",
+        "tokens",
+        path.to_str().unwrap(),
+        "--diagnostic-format=json",
+    ]);
+    assert_eq!(output.status.code(), Some(1));
+    let text = stderr(&output);
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.len(), 101, "{text}");
+    assert!(
+        lines[..100]
+            .iter()
+            .all(|line| line.contains(r#""code":"P1001""#))
+    );
+    assert!(lines[99].contains(r#""line_start":100,"#), "{}", lines[99]);
+    assert!(
+        lines[100].starts_with(
+            r#"{"format_version":1,"severity":"note","code":"P0004","message":"400 more diagnostics not shown","labels":[]"#
+        ),
+        "{}",
+        lines[100]
+    );
 }
 
 #[test]
