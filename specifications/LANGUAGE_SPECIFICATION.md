@@ -236,23 +236,26 @@ From highest to lowest. Operators on the same row have equal precedence.
 This table lists the v0.1 operators only. The complete table, including the
 planned operators `**`, `?.`, `|>`, `??` and `try`, and the proposed
 `await`, is in
-[OPERATORS.md](OPERATORS.md); the planned operators are inserted without
-changing the relative order of the v0.1 operators.
+[OPERATORS.md §1](OPERATORS.md#1-precedence-and-associativity); the planned
+operators are inserted without changing the relative order of the v0.1
+operators. The level numbers are those of OPERATORS.md, so a level means the
+same in both documents; the missing levels 2, 11 and 12 belong to planned
+operators.
 
-| Precedence | Operators | Associativity |
+| Level | Operators | Associativity |
 |---|---|---|
 | 1 | call `f(x)`, member access `a.b` | left |
-| 2 | unary `-` `!` `~` | prefix |
-| 3 | `as` | left |
-| 4 | `*` `/` `%` | left |
-| 5 | `+` `-` | left |
-| 6 | `<<` `>>` | left |
-| 7 | `&` | left |
-| 8 | `^` | left |
-| 9 | <code>&#124;</code> | left |
-| 10 | `==` `!=` `<` `<=` `>` `>=` | none |
-| 11 | `&&` | left |
-| 12 | <code>&#124;&#124;</code> | left |
+| 3 | unary `-` `!` `~` | prefix |
+| 4 | `as` | left |
+| 5 | `*` `/` `%` | left |
+| 6 | `+` `-` | left |
+| 7 | `<<` `>>` | left |
+| 8 | `&` | left |
+| 9 | `^` | left |
+| 10 | <code>&#124;</code> | left |
+| 13 | `==` `!=` `<` `<=` `>` `>=` | none |
+| 14 | `&&` | left |
+| 15 | <code>&#124;&#124;</code> | left |
 
 Unlike C, the bitwise operators bind more tightly than comparisons, so
 `flags & MASK == 0` means `(flags & MASK) == 0`. Comparison operators are
