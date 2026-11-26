@@ -8,12 +8,14 @@
 //! [ADR-0004]: https://github.com/Peixotou/pinguer/blob/main/docs/adr/0004-intermediate-representations.md
 //! [ADR-0028]: https://github.com/Peixotou/pinguer/blob/main/docs/adr/0028-ast-representation.md
 
+mod expr;
 mod ty;
 
 use std::fmt;
 
 use pinguer_source::Span;
 
+pub use expr::{Base, Expr, ExprKind, Literal};
 pub use ty::{Type, TypeKind};
 
 /// Identifies a node of one file's syntax tree.
