@@ -33,6 +33,7 @@ supersedes an earlier one.
 | [0024](0024-control-characters-and-line-separators.md) | Rejection of control characters and Unicode line separators | Accepted |
 | [0025](0025-string-interpolation-syntax.md) | String interpolation syntax | Proposed |
 | [0026](0026-locating-and-invoking-clang.md) | Locating and invoking clang | Proposed |
+| [0027](0027-parser-architecture.md) | Parser architecture | Accepted |
 
 ## Template
 
