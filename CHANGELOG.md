@@ -35,7 +35,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   ADR-0026 (proposed) the requirements for locating and invoking `clang`.
 - A limit of 100 reported diagnostics per invocation; further diagnostics
   are counted and summarized by a `P0004` note in both formats.
-- Scalability tests with inputs of up to 2 MB and a front-end benchmark
+- Scalability tests with inputs of up to 5 MB and a front-end benchmark
   (`cargo bench -p pinguer_cli --bench scalability`).
 
 ### Fixed

@@ -21,7 +21,7 @@
 | Integration | `compiler/lexer/tests/lexer.rs` | Every token kind, newline significance rules, every lexical diagnostic, recovery after errors (including `Unknown` tokens for rejected characters), source ordering of diagnostics, the diagnostic limit |
 | Property | `compiler/lexer/tests/robustness.rs` | 9,000 pseudo-random inputs plus deep nesting: no panics, span invariants, newline invariants, determinism, and limited lexing reporting a prefix of unlimited lexing |
 | End-to-end | `cli/tests/cli.rs` | Running the `pinguer` binary: version, help, unavailable commands, usage errors in both formats, arguments that are not valid Unicode, token listing, a closed standard output, human and JSON diagnostics, the diagnostic limit, missing, non-UTF-8 and directory inputs |
-| Scalability | `cli/tests/scalability.rs` | Inputs of up to 2 MB: diagnostic output independent of input size, narrow excerpts on long lines, exact positions deep inside long Unicode lines and after many lines. No timings are asserted. |
+| Scalability | `cli/tests/scalability.rs` | Inputs of up to 5 MB: diagnostic output independent of input size, narrow excerpts on long lines, exact positions deep inside long Unicode lines and after many lines. No timings are asserted. |
 | Benchmark | `cli/benches/scalability.rs` | Not a test: times reading, loading, indexing, lexing, position lookup, diagnostic rendering and listing separately for inputs from 10 KB to 10 MB, and prints the growth per doubling |
 
 Commands:

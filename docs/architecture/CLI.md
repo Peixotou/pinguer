@@ -51,9 +51,10 @@ dependency resolver, build caching and cross-compilation
   the command line, before the first malformed one, applies even to a
   command that does not accept the option. Otherwise they are printed in the
   human format. Exit statuses do not depend on the format.
-* One invocation reports at most 100 diagnostics, the first ones found. If
-  there are more, they are counted and summarized by a final `P0004` note
-  ("N more diagnostics not shown"), in both diagnostic formats. The closing
+* One invocation reports at most 100 diagnostics, those that come first in
+  the source. If there are more, they are counted and summarized by a final
+  `P0004` note ("N more diagnostics not shown"), in both diagnostic formats.
+  The closing
   `error: aborting due to N previous errors` line and the exit status count
   every error, including suppressed ones. The limit bounds the output and the
   memory spent on diagnostics for inputs with millions of errors.
