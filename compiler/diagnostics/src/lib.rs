@@ -281,21 +281,22 @@ impl Diagnostics {
     /// that reaching the limit is never silent.
     #[must_use]
     pub fn suppression_notice(&self) -> Option<Diagnostic> {
-        let limit = self.limit?;
         if self.suppressed == 0 {
             return None;
         }
         let plural = if self.suppressed == 1 { "" } else { "s" };
-        Some(
-            Diagnostic::new(
-                Severity::Note,
-                format!("{} more diagnostic{plural} not shown", self.suppressed),
-            )
-            .with_code(codes::DIAGNOSTICS_SUPPRESSED)
-            .with_note(format!(
-                "at most {limit} diagnostics are reported in one compilation"
-            )),
+        let mut notice = Diagnostic::new(
+            Severity::Note,
+            format!("{} more diagnostic{plural} not shown", self.suppressed),
         )
+        .with_code(codes::DIAGNOSTICS_SUPPRESSED);
+        // Without a limit, only `record_suppressed` can suppress anything.
+        if let Some(limit) = self.limit {
+            notice = notice.with_note(format!(
+                "at most {limit} diagnostics are reported in one compilation"
+            ));
+        }
+        Some(notice)
     }
 
     /// Returns `true` if no diagnostic has been retained.
@@ -410,6 +411,15 @@ mod tests {
         diagnostics.record_suppressed(Severity::Note, 1);
         assert_eq!(diagnostics.error_count(), 42);
         assert_eq!(diagnostics.suppressed_count(), 42);
+    }
+
+    #[test]
+    fn suppression_is_never_silent_even_without_a_limit() {
+        let mut diagnostics = Diagnostics::new();
+        diagnostics.record_suppressed(Severity::Error, 3);
+        let notice = diagnostics.suppression_notice().unwrap();
+        assert_eq!(notice.message, "3 more diagnostics not shown");
+        assert!(notice.notes.is_empty());
     }
 
     #[test]
