@@ -12,6 +12,11 @@ publish = false
 name = "pinguer"
 path = "src/main.rs"
 
+# Measurements, not tests: `cargo bench -p pinguer_cli --bench scalability`.
+[[bench]]
+name = "scalability"
+harness = false
+
 [dependencies]
 pinguer_source.workspace = true
 pinguer_diagnostics.workspace = true
