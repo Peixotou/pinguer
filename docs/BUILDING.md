@@ -6,7 +6,7 @@
 |---|---|---|
 | Rust (stable) with `rustfmt` and `clippy` | Building the compiler | Edition 2024 requires Rust 1.85 or newer, and the code uses `let` chains, stable since Rust 1.88. Development and CI use the latest stable release; Phase 01 was verified with Rust 1.100.0. A minimum supported version is not yet tested or declared. |
 | Platform C toolchain | Linking the compiler (Rust requirement) | Windows: Visual Studio Build Tools with the "Desktop development with C++" workload. Linux: `cc` (GCC or Clang). macOS: Xcode Command Line Tools. |
-| LLVM `clang` | Building Pinguer programs (from Phase 04) | **Not needed yet.** Phase 01 validated LLVM/clang 23.1.6 on Windows. The minimum version will be established by CI. |
+| LLVM `clang` | Building Pinguer programs (from Phase 04) | **Not needed yet.** Phase 01 validated LLVM/clang 23.1.6 on Windows. The minimum version will be established by CI. The official Windows installer does not add `clang` to `PATH`; how the compiler will find it is specified in [ADR-0026](adr/0026-locating-and-invoking-clang.md) (proposed). |
 
 The compiler has no third-party Rust dependencies, so no network access is
 needed after the toolchain is installed.
