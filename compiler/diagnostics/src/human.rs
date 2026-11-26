@@ -20,6 +20,15 @@
 //! placeholder, so that a diagnostic can never reorder or hide text in the
 //! user's terminal. Column markers are computed from the sanitised text.
 //!
+//! # Long lines
+//!
+//! An excerpt shows at most [`MAX_EXCERPT_WIDTH`] cells of a source line. A
+//! longer line is cut around its labels and every cut is marked with `...`;
+//! labels too far apart to share one excerpt get one excerpt each. The size
+//! of a rendered diagnostic therefore depends on its number of labels, not on
+//! the length of the lines they point into, and rendering never scans a
+//! whole line.
+//!
 //! # Known limitations
 //!
 //! * Every displayed character is assumed to occupy one terminal cell; wide
@@ -29,12 +38,28 @@
 //! * Output is never colored.
 
 use std::fmt::Write as _;
+use std::ops::Range;
 
 use pinguer_source::{FileId, SourceFile, SourceMap};
 
 use crate::{Diagnostic, Label, LabelStyle};
 
 const TAB_WIDTH: usize = 4;
+
+/// The widest part of a source line, in terminal cells, shown by one
+/// excerpt. 120 cells keep an excerpt on one line of a typical terminal
+/// while leaving room for the gutter and the cut markers.
+pub const MAX_EXCERPT_WIDTH: usize = 120;
+
+/// Cells of source text kept before the first label of a cut excerpt.
+const EXCERPT_CONTEXT: usize = 24;
+
+/// Marks the place where an excerpt was cut.
+const ELLIPSIS: &str = "...";
+
+/// A label clamped to the line it is displayed on: its start and end byte
+/// offsets, both character boundaries within the line.
+type Mark<'a> = (usize, usize, &'a Label);
 
 /// Renders one diagnostic. The result always ends with a newline.
 ///
@@ -136,33 +161,97 @@ fn files_in_display_order(diagnostic: &Diagnostic) -> Vec<FileId> {
 }
 
 fn write_snippet(out: &mut String, file: &SourceFile, labels: &[&Label], gutter: usize) {
-    let pad = " ".repeat(gutter);
+    let text = file.text();
     let mut by_line: Vec<(u32, &Label)> = labels
         .iter()
         .map(|&label| (file.line_col(label.span.start).line, label))
         .collect();
     by_line.sort_by_key(|&(line, label)| (line, label.span.start, label.span.end));
 
-    let mut index = 0;
-    while index < by_line.len() {
-        let line = by_line[index].0;
-        let line_range = file.line_range(line as usize);
-        let line_text = &file.text()[line_range.clone()];
-        let shown = sanitize(line_text);
+    for group in by_line.chunk_by(|a, b| a.0 == b.0) {
+        let line = group[0].0;
+        let range = file.line_range(line as usize);
+        let marks: Vec<Mark<'_>> = group
+            .iter()
+            .map(|&(_, label)| {
+                let start = floor_char_boundary(text, (label.span.start as usize).min(range.end));
+                let end =
+                    floor_char_boundary(text, (label.span.end as usize).min(range.end)).max(start);
+                (start, end, label)
+            })
+            .collect();
+        let mut first = 0;
+        while first < marks.len() {
+            let (window, count) = excerpt_window(text, range.clone(), &marks[first..]);
+            let excerpt = Excerpt {
+                text,
+                line,
+                cut_before: window.start > range.start,
+                cut_after: window.end < range.end,
+                window,
+            };
+            excerpt.write(out, gutter, &marks[first..first + count]);
+            first += count;
+        }
+    }
+}
+
+/// Chooses the part of the line `range` that is shown for `marks`, which are
+/// sorted by start offset. Returns the shown byte range and the number of
+/// marks, at least one, that fall inside it.
+fn excerpt_window(text: &str, range: Range<usize>, marks: &[Mark<'_>]) -> (Range<usize>, usize) {
+    if advance(text, range.start, range.end, MAX_EXCERPT_WIDTH) == range.end {
+        return (range, marks.len());
+    }
+    let anchor = marks[0].0;
+    let mut start = retreat(text, anchor, range.start, EXCERPT_CONTEXT);
+    let end = advance(text, start, range.end, MAX_EXCERPT_WIDTH);
+    if end == range.end {
+        // The line ends inside the window: use the free space for context
+        // on the left instead.
+        start = retreat(text, range.end, range.start, MAX_EXCERPT_WIDTH);
+    }
+    let visible = marks[1..]
+        .iter()
+        .take_while(|&&(mark_start, _, _)| mark_start < end || end == range.end)
+        .count();
+    (start..end, 1 + visible)
+}
+
+/// One displayed piece of a source line, with its labels.
+struct Excerpt<'a> {
+    text: &'a str,
+    line: u32,
+    /// The shown byte range of `text`.
+    window: Range<usize>,
+    cut_before: bool,
+    cut_after: bool,
+}
+
+impl Excerpt<'_> {
+    fn write(&self, out: &mut String, gutter: usize, marks: &[Mark<'_>]) {
+        let line = self.line;
+        let mut shown = String::new();
+        if self.cut_before {
+            shown.push_str(ELLIPSIS);
+        }
+        for c in self.text[self.window.clone()].chars() {
+            push_display(&mut shown, c);
+        }
+        if self.cut_after {
+            shown.push_str(ELLIPSIS);
+        }
         if shown.is_empty() {
             let _ = writeln!(out, "{line:>gutter$} |");
         } else {
             let _ = writeln!(out, "{line:>gutter$} | {shown}");
         }
 
-        while index < by_line.len() && by_line[index].0 == line {
-            let label = by_line[index].1;
-            let text = file.text();
-            let start = floor_char_boundary(text, (label.span.start as usize).min(line_range.end));
-            let end =
-                floor_char_boundary(text, (label.span.end as usize).min(line_range.end)).max(start);
-            let column = display_width(&text[line_range.start..start]);
-            let width = display_width(&text[start..end]).max(1);
+        let indent = if self.cut_before { ELLIPSIS.len() } else { 0 };
+        let pad = " ".repeat(gutter);
+        for &(start, end, label) in marks {
+            let column = indent + text_width(&self.text[self.window.start..start]);
+            let width = text_width(&self.text[start..end.min(self.window.end)]).max(1);
             let marker = match label.style {
                 LabelStyle::Primary => '^',
                 LabelStyle::Secondary => '-',
@@ -174,9 +263,38 @@ fn write_snippet(out: &mut String, file: &SourceFile, labels: &[&Label], gutter:
                 row.push_str(&sanitize(&label.message));
             }
             let _ = writeln!(out, "{row}");
-            index += 1;
         }
     }
+}
+
+/// Returns the end of the longest prefix of `text[from..limit]` whose
+/// display width is at most `budget` cells.
+fn advance(text: &str, from: usize, limit: usize, budget: usize) -> usize {
+    let mut cells = 0;
+    let mut end = from;
+    for c in text[from..limit].chars() {
+        cells += cell_width(c);
+        if cells > budget {
+            break;
+        }
+        end += c.len_utf8();
+    }
+    end
+}
+
+/// Returns the start of the longest suffix of `text[limit..from]` whose
+/// display width is at most `budget` cells.
+fn retreat(text: &str, from: usize, limit: usize, budget: usize) -> usize {
+    let mut cells = 0;
+    let mut start = from;
+    for c in text[limit..from].chars().rev() {
+        cells += cell_width(c);
+        if cells > budget {
+            break;
+        }
+        start -= c.len_utf8();
+    }
+    start
 }
 
 fn floor_char_boundary(text: &str, mut index: usize) -> usize {
@@ -221,16 +339,26 @@ fn sanitize(text: &str) -> String {
     out
 }
 
-/// Returns the number of characters `text` occupies after [`sanitize`].
-fn display_width(text: &str) -> usize {
-    let mut buffer = String::new();
-    text.chars()
-        .map(|c| {
-            buffer.clear();
-            push_display(&mut buffer, c);
-            buffer.chars().count()
-        })
-        .sum()
+/// Returns the number of cells `c` occupies after [`push_display`].
+fn cell_width(c: char) -> usize {
+    if c == '\t' {
+        TAB_WIDTH
+    } else if needs_escape(c) {
+        // `<U+` and `>` around at least four hexadecimal digits.
+        let digits = match u32::from(c) {
+            0..=0xFFFF => 4,
+            0x1_0000..=0xF_FFFF => 5,
+            _ => 6,
+        };
+        digits + 4
+    } else {
+        1
+    }
+}
+
+/// Returns the number of cells `text` occupies after [`sanitize`].
+fn text_width(text: &str) -> usize {
+    text.chars().map(cell_width).sum()
 }
 
 #[cfg(test)]
@@ -354,6 +482,106 @@ error: two files
   | ------ and here
 ";
         assert_eq!(render(&map, &diagnostic), expected);
+    }
+
+    fn render_one_label(text: &str, span: (u32, u32)) -> String {
+        let (map, file) = setup("long.pgr", text);
+        let diagnostic =
+            Diagnostic::error("long").with_primary(Span::new(file, span.0, span.1), "here");
+        render(&map, &diagnostic)
+    }
+
+    #[test]
+    fn long_line_is_cut_around_the_label() {
+        let text = format!("{}${}", "a".repeat(1_000), "b".repeat(1_000));
+        let expected = format!(
+            "\
+error: long
+ --> long.pgr:1:1001
+  |
+1 | ...{}${}...
+  | {}^ here
+",
+            "a".repeat(EXCERPT_CONTEXT),
+            "b".repeat(MAX_EXCERPT_WIDTH - EXCERPT_CONTEXT - 1),
+            " ".repeat(ELLIPSIS.len() + EXCERPT_CONTEXT),
+        );
+        assert_eq!(render_one_label(&text, (1_000, 1_001)), expected);
+    }
+
+    #[test]
+    fn label_near_the_start_of_a_long_line_is_not_cut_on_the_left() {
+        let text = "a".repeat(1_000);
+        let rendered = render_one_label(&text, (5, 6));
+        let source = format!("1 | {}...\n", "a".repeat(MAX_EXCERPT_WIDTH));
+        assert!(rendered.contains(&source), "{rendered}");
+        assert!(rendered.contains("  |      ^ here\n"), "{rendered}");
+    }
+
+    #[test]
+    fn label_at_the_end_of_a_long_line_fills_the_excerpt_with_context() {
+        let text = format!("{}$", "a".repeat(1_000));
+        let rendered = render_one_label(&text, (1_000, 1_001));
+        let source = format!("1 | ...{}$\n", "a".repeat(MAX_EXCERPT_WIDTH - 1));
+        let marker = format!("  | {}^ here\n", " ".repeat(ELLIPSIS.len() + 119));
+        assert!(rendered.contains(&source), "{rendered}");
+        assert!(rendered.contains(&marker), "{rendered}");
+        // An empty span at the end of the line still gets one marker.
+        let rendered = render_one_label(&text, (1_001, 1_001));
+        let marker = format!("  | {}^ here\n", " ".repeat(ELLIPSIS.len() + 120));
+        assert!(rendered.contains(&marker), "{rendered}");
+    }
+
+    #[test]
+    fn distant_labels_on_one_long_line_get_separate_excerpts() {
+        let text = "x".repeat(2_000);
+        let (map, file) = setup("far.pgr", &text);
+        let diagnostic = Diagnostic::error("far")
+            .with_primary(Span::new(file, 1_500, 1_501), "second")
+            .with_secondary(Span::new(file, 10, 12), "first");
+        let rendered = render(&map, &diagnostic);
+        let rows: Vec<&str> = rendered.lines().collect();
+        assert_eq!(rows[3], format!("1 | {}...", "x".repeat(MAX_EXCERPT_WIDTH)));
+        assert_eq!(rows[4], format!("  | {}-- first", " ".repeat(10)));
+        assert_eq!(
+            rows[5],
+            format!("1 | ...{}...", "x".repeat(MAX_EXCERPT_WIDTH))
+        );
+        assert_eq!(rows[6], format!("  | {}^ second", " ".repeat(3 + 24)));
+        assert_eq!(rows.len(), 7, "{rendered}");
+    }
+
+    #[test]
+    fn cut_excerpts_measure_tabs_escapes_and_multibyte_characters() {
+        // Before the label: a tab (4 cells), U+202E (8 cells as `<U+202E>`)
+        // and `é` (1 cell), so 11 more `x` complete the 24 cells of context.
+        let text = format!("{}\t\u{202E}é${}", "x".repeat(500), "y".repeat(500));
+        let start = text.find('$').unwrap() as u32;
+        let rendered = render_one_label(&text, (start, start + 1));
+        let source = format!(
+            "1 | ...{}    <U+202E>é${}...\n",
+            "x".repeat(11),
+            "y".repeat(MAX_EXCERPT_WIDTH - EXCERPT_CONTEXT - 1)
+        );
+        let marker = format!("  | {}^ here\n", " ".repeat(ELLIPSIS.len() + 24));
+        assert!(rendered.contains(&source), "{rendered}");
+        assert!(rendered.contains(&marker), "{rendered}");
+        assert!(!rendered.contains('\u{202E}'));
+    }
+
+    #[test]
+    fn rendered_size_does_not_depend_on_line_length() {
+        for length in [1_000usize, 100_000, 1_000_000] {
+            let text = "z".repeat(length);
+            let middle = (length / 2) as u32;
+            // A label covering most of the line is underlined only as far as
+            // the excerpt reaches.
+            let rendered = render_one_label(&text, (middle, length as u32));
+            assert!(
+                rendered.len() < 2 * MAX_EXCERPT_WIDTH + 100,
+                "{length}: {rendered}"
+            );
+        }
     }
 
     #[test]

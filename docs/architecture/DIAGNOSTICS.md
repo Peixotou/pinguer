@@ -56,6 +56,12 @@ Rules implemented by the renderer:
 * Labels on the same line are shown in column order, one marker row each.
 * Labels in other files get their own ` ::: file:line:col` section.
 * A label spanning several lines is underlined to the end of its first line.
+* An excerpt shows at most 120 cells of a source line. A longer line is cut
+  around its labels, keeping up to 24 cells of context before the first one,
+  and each cut is marked with `...`; labels too far apart to share one
+  excerpt get one excerpt each. This bounds the size of every diagnostic
+  independently of line length: without it, many diagnostics on one long
+  line would each repeat the whole line.
 * Tabs are expanded to four spaces. Control characters, bidirectional
   formatting characters and invisible formatting characters in source lines,
   messages and file names are shown as `<U+XXXX>`, so diagnostics cannot
