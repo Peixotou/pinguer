@@ -155,6 +155,84 @@ fn debug_tokens_usage_errors() {
 }
 
 #[test]
+fn command_line_errors_honor_the_json_format() {
+    for (args, status, message) in [
+        (
+            &["compile", "--diagnostic-format", "json"][..],
+            2,
+            "unknown command `compile`",
+        ),
+        (
+            &["version", "--diagnostic-format=json"],
+            2,
+            "unexpected argument `--diagnostic-format=json`; `version` takes no arguments",
+        ),
+        (
+            &["debug", "tokens", "--diagnostic-format=json"],
+            2,
+            "missing source file for `debug tokens`",
+        ),
+        (
+            &[
+                "debug",
+                "tokens",
+                "--diagnostic-format=json",
+                "a.pgr",
+                "b.pgr",
+            ],
+            2,
+            "`debug tokens` accepts exactly one file",
+        ),
+        (
+            &[
+                "debug",
+                "tokens",
+                "--diagnostic-format=json",
+                "--diagnostic-format=xml",
+            ],
+            2,
+            "invalid diagnostic format `xml`; expected `human` or `json`",
+        ),
+        (
+            &["build", "hello.pgr", "--diagnostic-format", "json"],
+            3,
+            "`pinguer build` is not available in Pinguer 0.1.0-dev",
+        ),
+    ] {
+        let output = pinguer(args);
+        assert_eq!(output.status.code(), Some(status), "{args:?}");
+        assert!(output.stdout.is_empty(), "{args:?}");
+        let text = stderr(&output);
+        assert_eq!(text.lines().count(), 1, "{args:?}: {text}");
+        let expected = format!(
+            r#"{{"format_version":1,"severity":"error","code":null,"message":"{message}","labels":[],"notes":["#
+        );
+        assert!(text.starts_with(&expected), "{args:?}: {text}");
+        assert!(text.ends_with("]}\n"), "{args:?}: {text}");
+    }
+}
+
+#[test]
+fn command_line_errors_are_human_when_the_format_is_unknown() {
+    for args in [
+        &["debug", "tokens", "a.pgr", "--diagnostic-format"][..],
+        &["debug", "tokens", "a.pgr", "--diagnostic-format=xml"],
+        // A malformed option hides any later one.
+        &[
+            "debug",
+            "tokens",
+            "--diagnostic-format=xml",
+            "--diagnostic-format=json",
+        ],
+        &["compile"],
+    ] {
+        let output = pinguer(args);
+        assert_eq!(output.status.code(), Some(2), "{args:?}");
+        assert!(stderr(&output).starts_with("error: "), "{args:?}");
+    }
+}
+
+#[test]
 fn debug_tokens_lists_tokens_of_a_valid_file() {
     let output = pinguer(&["debug", "tokens", "hello.pgr"]);
     assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));

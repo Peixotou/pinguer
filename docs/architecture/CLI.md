@@ -45,6 +45,12 @@ dependency resolver, build caching and cross-compilation
 ## 3. Conventions
 
 * Results go to standard output; diagnostics and errors go to standard error.
+* Command-line errors (usage errors and "not available" messages) are
+  diagnostics too and follow `--diagnostic-format` whenever the format can be
+  determined: the last well-formed `--diagnostic-format` option anywhere on
+  the command line, before the first malformed one, applies even to a
+  command that does not accept the option. Otherwise they are printed in the
+  human format. Exit statuses do not depend on the format.
 * One invocation reports at most 100 diagnostics, the first ones found. If
   there are more, they are counted and summarized by a final `P0004` note
   ("N more diagnostics not shown"), in both diagnostic formats. The closing

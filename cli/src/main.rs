@@ -59,6 +59,9 @@ struct Output {
     /// a closed pipe (`pinguer debug tokens x | head`). That is not an error
     /// worth reporting, but there is no point in producing more output.
     stdout_closed: bool,
+    /// The format of every diagnostic this invocation prints, including
+    /// command-line errors. See [`requested_format`].
+    format: DiagnosticFormat,
 }
 
 impl Output {
@@ -78,12 +81,7 @@ impl Output {
 
     /// Writes the retained diagnostics, then the suppression notice if there
     /// is one, rendering one diagnostic at a time.
-    fn diagnostics(
-        &mut self,
-        map: &SourceMap,
-        diagnostics: &Diagnostics,
-        format: DiagnosticFormat,
-    ) {
+    fn diagnostics(&mut self, map: &SourceMap, diagnostics: &Diagnostics) {
         if diagnostics.is_empty() {
             return;
         }
@@ -94,21 +92,13 @@ impl Output {
         }
         let notice = diagnostics.suppression_notice();
         for (index, diagnostic) in diagnostics.iter().chain(notice.as_ref()).enumerate() {
-            match format {
-                DiagnosticFormat::Human => {
-                    if index > 0 {
-                        self.err("\n");
-                    }
-                    self.err(&human::render(map, diagnostic));
-                }
-                DiagnosticFormat::Json => {
-                    self.err(&json::render(map, diagnostic));
-                    self.err("\n");
-                }
+            if index > 0 && self.format == DiagnosticFormat::Human {
+                self.err("\n");
             }
+            self.diagnostic(map, diagnostic);
         }
         let errors = diagnostics.error_count();
-        if format == DiagnosticFormat::Human && errors > 0 {
+        if self.format == DiagnosticFormat::Human && errors > 0 {
             let plural = if errors == 1 { "" } else { "s" };
             self.err(&format!(
                 "\nerror: aborting due to {errors} previous error{plural}\n"
@@ -116,11 +106,50 @@ impl Output {
         }
     }
 
+    fn diagnostic(&mut self, map: &SourceMap, diagnostic: &Diagnostic) {
+        match self.format {
+            DiagnosticFormat::Human => self.err(&human::render(map, diagnostic)),
+            DiagnosticFormat::Json => {
+                self.err(&json::render(map, diagnostic));
+                self.err("\n");
+            }
+        }
+    }
+
     fn usage_error(&mut self, message: &str) -> u8 {
         let diagnostic = Diagnostic::error(message).with_note("run `pinguer help` for usage");
-        self.err(&human::render(&SourceMap::new(), &diagnostic));
+        self.diagnostic(&SourceMap::new(), &diagnostic);
         status::USAGE_ERROR
     }
+}
+
+/// Returns the diagnostic format requested on the command line, so that
+/// errors found while the command line is parsed can already use it.
+///
+/// Every `--diagnostic-format` option counts, wherever it is and whether or
+/// not the command accepts it, up to the first one whose value is missing or
+/// invalid: that is where parsing would report the error, so the format in
+/// effect there is the last well-formed one before it. Without such an
+/// option the format is human.
+fn requested_format(args: &[OsString]) -> DiagnosticFormat {
+    let mut format = DiagnosticFormat::Human;
+    let mut args = args.iter();
+    while let Some(arg) = args.next() {
+        let value = match arg.to_str() {
+            Some("--diagnostic-format") => args.next().map(OsString::as_os_str),
+            Some(text) => match text.strip_prefix("--diagnostic-format=") {
+                Some(value) => Some(OsStr::new(value)),
+                None => continue,
+            },
+            None => continue,
+        };
+        format = match value.and_then(OsStr::to_str) {
+            Some("human") => DiagnosticFormat::Human,
+            Some("json") => DiagnosticFormat::Json,
+            _ => break,
+        };
+    }
+    format
 }
 
 fn main() -> ExitCode {
@@ -131,6 +160,7 @@ fn main() -> ExitCode {
         stdout: io::BufWriter::with_capacity(64 * 1024, io::stdout().lock()),
         stderr: io::stderr().lock(),
         stdout_closed: false,
+        format: requested_format(&args),
     };
     let code = run(&args, &mut output);
     let _ = output.stdout.flush();
@@ -174,7 +204,7 @@ fn run(args: &[OsString], output: &mut Output) -> u8 {
                 "this version implements source loading, lexical analysis and diagnostics only",
             )
             .with_note("see ROADMAP.md for when this command is planned");
-            output.err(&human::render(&SourceMap::new(), &diagnostic));
+            output.diagnostic(&SourceMap::new(), &diagnostic);
             status::UNAVAILABLE
         }
         unknown => output.usage_error(&format!("unknown command `{unknown}`")),
@@ -202,7 +232,9 @@ Options:
 
 Options for `debug tokens`:
   --diagnostic-format <human|json>
-                        How to print diagnostics (default: human)
+                        How to print diagnostics (default: human). Errors in
+                        any command line that contains it are printed in the
+                        same format.
 
 The `debug` commands exist for compiler development; their output format is
 not stable.
@@ -221,9 +253,9 @@ fn debug(args: &[OsString], output: &mut Output) -> u8 {
 
 /// Parses the arguments of `debug tokens`. Options are compared as text; an
 /// argument that is not valid Unicode can only be the file name, which is
-/// passed to the operating system unchanged.
+/// passed to the operating system unchanged. `--diagnostic-format` is only
+/// validated here; [`requested_format`] has already applied it.
 fn debug_tokens(args: &[OsString], output: &mut Output) -> u8 {
-    let mut format = DiagnosticFormat::Human;
     let mut path: Option<&OsStr> = None;
     let mut index = 0;
     while index < args.len() {
@@ -241,16 +273,12 @@ fn debug_tokens(args: &[OsString], output: &mut Output) -> u8 {
             None
         };
         if let Some(value) = value {
-            format = match value.to_str() {
-                Some("human") => DiagnosticFormat::Human,
-                Some("json") => DiagnosticFormat::Json,
-                _ => {
-                    return output.usage_error(&format!(
-                        "invalid diagnostic format `{}`; expected `human` or `json`",
-                        value.display()
-                    ));
-                }
-            };
+            if !matches!(value.to_str(), Some("human" | "json")) {
+                return output.usage_error(&format!(
+                    "invalid diagnostic format `{}`; expected `human` or `json`",
+                    value.display()
+                ));
+            }
         } else if arg.as_encoded_bytes().starts_with(b"-") {
             // Reading from standard input (`-`) is not supported, and file
             // names starting with `-` must be written as `./-name`.
@@ -273,7 +301,7 @@ fn debug_tokens(args: &[OsString], output: &mut Output) -> u8 {
         Ok(file) => file,
         Err(error) => {
             diagnostics.push(load_error(path, &error));
-            output.diagnostics(&map, &diagnostics, format);
+            output.diagnostics(&map, &diagnostics);
             return status::COMPILE_ERROR;
         }
     };
@@ -288,7 +316,7 @@ fn debug_tokens(args: &[OsString], output: &mut Output) -> u8 {
         let text = map.snippet(token.span);
         output.out_fmt(format_args!("{start}\t{:?}\t{text:?}\n", token.kind));
     }
-    output.diagnostics(&map, &diagnostics, format);
+    output.diagnostics(&map, &diagnostics);
     if diagnostics.has_errors() {
         status::COMPILE_ERROR
     } else {
