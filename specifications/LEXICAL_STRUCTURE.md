@@ -175,7 +175,9 @@ octal_literal   = "0o" , octal_digit , { [ "_" ] , octal_digit } ;
 binary_literal  = "0b" , binary_digit , { [ "_" ] , binary_digit } ;
 ```
 
-* Prefixes are lowercase. Hexadecimal digits may be upper- or lowercase.
+* Prefixes are lowercase; `0X`, `0O` and `0B` are errors (`P1006`), and the
+  digits after them are still checked in the prefix's base. Hexadecimal
+  digits may be upper- or lowercase.
 * `_` is a digit separator and may only appear between two digits of the
   literal's base (`P1006`).
 * A decimal literal with more than one digit cannot start with `0`

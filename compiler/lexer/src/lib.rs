@@ -742,15 +742,29 @@ impl Lexer<'_> {
         let mut kind = TokenKind::Int;
         let mut exponent_read = false;
 
+        // Uppercase prefixes are invalid but recognised, so that `0XFF` is
+        // reported as a prefix error and its digits are checked in base 16.
         let base = match (first, self.peek()) {
-            ('0', Some('x')) => Some((16, "hexadecimal")),
-            ('0', Some('o')) => Some((8, "octal")),
-            ('0', Some('b')) => Some((2, "binary")),
+            ('0', Some(prefix @ ('x' | 'X'))) => Some((16, "hexadecimal", prefix)),
+            ('0', Some(prefix @ ('o' | 'O'))) => Some((8, "octal", prefix)),
+            ('0', Some(prefix @ ('b' | 'B'))) => Some((2, "binary", prefix)),
             _ => None,
         };
 
-        if let Some((radix, name)) = base {
+        if let Some((radix, name, prefix)) = base {
             self.bump();
+            if prefix.is_ascii_uppercase() {
+                let span = self.span(start, self.pos);
+                self.report(
+                    Diagnostic::error(format!("numeric prefix `0{prefix}` must be lowercase"))
+                        .with_code(codes::INVALID_NUMBER)
+                        .with_primary(span, "uppercase prefix")
+                        .with_help(format!(
+                            "write the {name} prefix as `0{}`",
+                            prefix.to_ascii_lowercase()
+                        )),
+                );
+            }
             let digits_start = self.pos;
             while self.peek().is_some_and(is_ident_continue) {
                 self.bump();

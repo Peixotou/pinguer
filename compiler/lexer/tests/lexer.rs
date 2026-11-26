@@ -432,10 +432,37 @@ fn missing_digits_after_prefix() {
 }
 
 #[test]
-fn uppercase_prefix_is_not_a_prefix() {
-    let lexed = lex("0X1F");
-    assert_eq!(lexed.codes(), ["P1006"]);
-    assert_eq!(lexed.labelled(), ["X1F"]);
+fn uppercase_prefixes_are_reported_as_prefix_errors() {
+    for (source, prefix, help) in [
+        ("0X1F", "0X", "write the hexadecimal prefix as `0x`"),
+        ("0O17", "0O", "write the octal prefix as `0o`"),
+        ("0B1010", "0B", "write the binary prefix as `0b`"),
+    ] {
+        let lexed = lex(source);
+        assert_eq!(lexed.codes(), ["P1006"], "{source}");
+        assert_eq!(lexed.labelled(), [prefix], "{source}");
+        assert_eq!(
+            lexed.diagnostics[0].message,
+            format!("numeric prefix `{prefix}` must be lowercase")
+        );
+        assert_eq!(lexed.diagnostics[0].help, [help]);
+        // Not an invalid suffix: one integer token, as with `0x1F`.
+        assert_eq!(lexed.kinds(), vec![T::Int], "{source}");
+    }
+}
+
+#[test]
+fn digits_after_an_uppercase_prefix_are_checked_in_its_base() {
+    let lexed = lex("0XFG 0B12");
+    assert_eq!(lexed.codes(), ["P1006"; 4]);
+    assert_eq!(lexed.labelled(), ["0X", "G", "0B", "2"]);
+}
+
+#[test]
+fn uppercase_exponent_is_not_a_prefix() {
+    let lexed = lex("0E5 0e5");
+    lexed.assert_clean();
+    assert_eq!(lexed.kinds(), vec![T::Float, T::Float]);
 }
 
 #[test]
