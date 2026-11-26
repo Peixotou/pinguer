@@ -4,6 +4,7 @@
 //! available. Every planned command is recognised and reports that it is not
 //! available yet, instead of pretending to work.
 
+use std::fmt;
 use std::io::{self, Write};
 use std::path::Path;
 use std::process::ExitCode;
@@ -47,22 +48,35 @@ enum DiagnosticFormat {
 
 /// Where command output goes. Abstracted so that output errors such as a
 /// closed pipe are handled in one place.
+///
+/// Output is written as it is produced instead of being assembled in memory
+/// first, so memory use does not grow with the size of the output.
 struct Output {
-    stdout: io::StdoutLock<'static>,
+    stdout: io::BufWriter<io::StdoutLock<'static>>,
     stderr: io::StderrLock<'static>,
+    /// Set when writing to standard output failed, for example because it is
+    /// a closed pipe (`pinguer debug tokens x | head`). That is not an error
+    /// worth reporting, but there is no point in producing more output.
+    stdout_closed: bool,
 }
 
 impl Output {
     fn out(&mut self, text: &str) {
-        // A closed stdout (for example `pinguer debug tokens x | head`) is not
-        // an error worth reporting.
-        let _ = self.stdout.write_all(text.as_bytes());
+        self.out_fmt(format_args!("{text}"));
+    }
+
+    fn out_fmt(&mut self, args: fmt::Arguments<'_>) {
+        if !self.stdout_closed && self.stdout.write_fmt(args).is_err() {
+            self.stdout_closed = true;
+        }
     }
 
     fn err(&mut self, text: &str) {
         let _ = self.stderr.write_all(text.as_bytes());
     }
 
+    /// Writes the retained diagnostics, then the suppression notice if there
+    /// is one, rendering one diagnostic at a time.
     fn diagnostics(
         &mut self,
         map: &SourceMap,
@@ -72,21 +86,32 @@ impl Output {
         if diagnostics.is_empty() {
             return;
         }
+        // Keep the order of a terminal that shows both streams: everything
+        // printed to standard output so far comes before the diagnostics.
+        if !self.stdout_closed && self.stdout.flush().is_err() {
+            self.stdout_closed = true;
+        }
         let notice = diagnostics.suppression_notice();
-        let reported = diagnostics.iter().chain(notice.as_ref());
-        match format {
-            DiagnosticFormat::Human => {
-                let mut text = human::render_all(map, reported);
-                let errors = diagnostics.error_count();
-                if errors > 0 {
-                    let plural = if errors == 1 { "" } else { "s" };
-                    text.push_str(&format!(
-                        "\nerror: aborting due to {errors} previous error{plural}\n"
-                    ));
+        for (index, diagnostic) in diagnostics.iter().chain(notice.as_ref()).enumerate() {
+            match format {
+                DiagnosticFormat::Human => {
+                    if index > 0 {
+                        self.err("\n");
+                    }
+                    self.err(&human::render(map, diagnostic));
                 }
-                self.err(&text);
+                DiagnosticFormat::Json => {
+                    self.err(&json::render(map, diagnostic));
+                    self.err("\n");
+                }
             }
-            DiagnosticFormat::Json => self.err(&json::render_all(map, reported)),
+        }
+        let errors = diagnostics.error_count();
+        if format == DiagnosticFormat::Human && errors > 0 {
+            let plural = if errors == 1 { "" } else { "s" };
+            self.err(&format!(
+                "\nerror: aborting due to {errors} previous error{plural}\n"
+            ));
         }
     }
 
@@ -100,8 +125,9 @@ impl Output {
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut output = Output {
-        stdout: io::stdout().lock(),
+        stdout: io::BufWriter::with_capacity(64 * 1024, io::stdout().lock()),
         stderr: io::stderr().lock(),
+        stdout_closed: false,
     };
     let code = run(&args, &mut output);
     let _ = output.stdout.flush();
@@ -241,13 +267,14 @@ fn debug_tokens(args: &[String], output: &mut Output) -> u8 {
 
     let source = map.file(file);
     let tokens = pinguer_lexer::tokenize(file, source.text(), &mut diagnostics);
-    let mut listing = String::new();
     for token in &tokens {
+        if output.stdout_closed {
+            break;
+        }
         let start = source.line_col(token.span.start);
         let text = map.snippet(token.span);
-        listing.push_str(&format!("{start}\t{:?}\t{text:?}\n", token.kind));
+        output.out_fmt(format_args!("{start}\t{:?}\t{text:?}\n", token.kind));
     }
-    output.out(&listing);
     output.diagnostics(&map, &diagnostics, format);
     if diagnostics.has_errors() {
         status::COMPILE_ERROR

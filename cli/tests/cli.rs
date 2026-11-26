@@ -280,6 +280,31 @@ fn json_diagnostics_beyond_the_limit_are_summarized() {
 }
 
 #[test]
+fn closed_standard_output_is_not_an_error() {
+    use std::io::{BufRead, BufReader};
+    use std::process::Stdio;
+
+    let dir = TempDir::new("closed-stdout");
+    // Far more output than any pipe buffer holds.
+    let path = dir.file("many.pgr", "let x = 1\n".repeat(200_000).as_bytes());
+    let mut child = Command::new(env!("CARGO_BIN_EXE_pinguer"))
+        .args(["debug", "tokens", path.to_str().unwrap()])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to run the pinguer executable");
+    let mut first = String::new();
+    BufReader::new(child.stdout.take().unwrap())
+        .read_line(&mut first)
+        .unwrap();
+    // The reader is dropped here, closing the pipe like `| head -1`.
+    assert_eq!(first, "1:1\tKeyword(Let)\t\"let\"\n");
+    let output = child.wait_with_output().unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stderr.is_empty(), "{}", stderr(&output));
+}
+
+#[test]
 fn missing_file_is_reported() {
     let output = pinguer(&["debug", "tokens", "does-not-exist.pgr"]);
     assert_eq!(output.status.code(), Some(1));
