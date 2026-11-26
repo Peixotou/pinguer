@@ -4,6 +4,7 @@ members = [
     "compiler/source",
     "compiler/diagnostics",
     "compiler/lexer",
+    "compiler/ast",
     "cli",
 ]
 
