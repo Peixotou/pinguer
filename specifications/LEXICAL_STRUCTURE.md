@@ -22,7 +22,8 @@ input.
 A line break is either a line feed (U+000A) or a carriage return followed by a
 line feed (U+000D U+000A). A carriage return that is not immediately followed
 by a line feed is an error anywhere in the file, including inside comments and
-literals (`P1010`).
+literals (`P1010`); outside comments and literals it produces one `Unknown`
+token.
 
 Lines and columns in diagnostics are 1-based. Columns count Unicode scalar
 values.
@@ -310,12 +311,15 @@ The parser ignores `NEWLINE` tokens in the positions listed in
 ## 7. Error recovery
 
 For every lexical error, the lexer reports a diagnostic and still produces
-tokens covering the offending text, so that parsing can continue:
+tokens covering the offending text, so that parsing can continue. Characters
+inside comments are covered by the comment, which produces no token. An
+`Unknown` token has always been diagnosed already; later stages do not
+report it again.
 
 | Error | Recovery |
 |---|---|
 | Unknown character | One `Unknown` token per character. |
-| Control character or line separator (section 3.2) outside a comment or literal | One `Unknown` token per character. |
+| Forbidden character (section 3) or lone carriage return outside a comment or literal | One `Unknown` token per character. |
 | Malformed numeric literal | One literal token covering the whole malformed literal, including any suffix. |
 | Unterminated string or character literal | A literal token up to the end of the line. |
 | Invalid escape | The literal continues after the escape. |

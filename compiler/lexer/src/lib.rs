@@ -373,9 +373,11 @@ impl Lexer<'_> {
                     self.bump();
                     if self.eat('\n') {
                         self.note_line_break(start, self.pos);
+                    } else {
+                        // A lone carriage return, reported by
+                        // `check_text_flow`.
+                        self.push(TokenKind::Unknown, start, self.pos);
                     }
-                    // A lone carriage return was reported by `check_text_flow`
-                    // and is otherwise treated as whitespace.
                 }
                 '/' if self.peek_nth(1) == Some('/') => self.line_comment(),
                 '/' if self.peek_nth(1) == Some('*') => self.block_comment(),
@@ -384,11 +386,7 @@ impl Lexer<'_> {
                 '0'..='9' => self.number(),
                 c if c == '_' || c.is_ascii_alphabetic() => self.identifier(),
                 c if !c.is_ascii() && c.is_alphanumeric() => self.identifier(),
-                c if is_text_flow_control(c) => {
-                    // Reported by `check_text_flow`.
-                    self.bump();
-                }
-                c if is_forbidden_control(c) => {
+                c if is_text_flow_control(c) || is_forbidden_control(c) => {
                     // Reported by `check_text_flow`; an `Unknown` token keeps
                     // the place of the rejected character.
                     self.bump();

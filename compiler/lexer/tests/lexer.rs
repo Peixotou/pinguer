@@ -940,7 +940,52 @@ fn backslash_before_forbidden_control_is_not_an_escape() {
 fn lone_carriage_return_is_rejected() {
     let lexed = lex("a\rb");
     assert_eq!(lexed.codes(), ["P1010"]);
-    assert_eq!(lexed.kinds(), vec![T::Ident, T::Ident]);
+    assert_eq!(lexed.kinds(), vec![T::Ident, T::Unknown, T::Ident]);
+    assert_eq!(lexed.pairs()[1], (T::Unknown, "\r"));
+}
+
+#[test]
+fn rejected_characters_outside_literals_keep_their_place_as_unknown_tokens() {
+    // Every character diagnosed outside a comment or literal is covered by
+    // exactly one `Unknown` token, whatever pass reported it.
+    for (source, code) in [
+        ("a \u{202E} b", "P1009"),
+        ("a \r b", "P1010"),
+        ("a \u{2028} b", "P1012"),
+        ("a $ b", "P1001"),
+    ] {
+        let lexed = lex(source);
+        assert_eq!(lexed.codes(), [code], "{source:?}");
+        assert_eq!(
+            lexed.kinds(),
+            vec![T::Ident, T::Unknown, T::Ident],
+            "{source:?}"
+        );
+        let unknown = lexed.tokens[1].span;
+        assert_eq!(
+            lexed.diagnostics[0].main_label().unwrap().span,
+            unknown,
+            "{source:?}"
+        );
+    }
+}
+
+#[test]
+fn rejected_characters_inside_literals_and_comments_produce_no_extra_tokens() {
+    for source in ["\"a\u{202E}b\"", "// a\u{202E}b", "/* \r */", "'\u{2028}'"] {
+        let lexed = lex(source);
+        assert_eq!(lexed.codes().len(), 1, "{source:?}");
+        assert!(!lexed.kinds().contains(&T::Unknown), "{source:?}");
+    }
+}
+
+#[test]
+fn unknown_token_at_line_start_still_follows_the_newline() {
+    let lexed = lex("a\n\u{202E}\nb");
+    assert_eq!(
+        lexed.kinds(),
+        vec![T::Ident, T::Newline, T::Unknown, T::Newline, T::Ident]
+    );
 }
 
 #[test]
