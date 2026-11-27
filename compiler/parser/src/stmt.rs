@@ -2,7 +2,7 @@
 
 use pinguer_ast as ast;
 use pinguer_diagnostics::{Diagnostic, codes};
-use pinguer_lexer::TokenKind;
+use pinguer_lexer::{Keyword, TokenKind};
 
 use crate::ids::PENDING;
 use crate::{PResult, Parser};
@@ -40,10 +40,19 @@ impl Parser<'_> {
         })
     }
 
-    /// `Statement = … | ExprStatement | …`
+    /// `Statement = LetDecl | VarDecl | ConstDecl | … | ExprStatement | …`
     fn stmt(&mut self) -> ast::Stmt {
         let start = self.start();
-        let kind = self.expr_stmt();
+        let binding = match self.cursor.kind() {
+            TokenKind::Keyword(Keyword::Let) => Some(ast::BindingKind::Let),
+            TokenKind::Keyword(Keyword::Var) => Some(ast::BindingKind::Var),
+            TokenKind::Keyword(Keyword::Const) => Some(ast::BindingKind::Const),
+            _ => None,
+        };
+        let kind = match binding {
+            Some(kind) => self.binding(kind).map(ast::StmtKind::Binding),
+            None => self.expr_stmt(),
+        };
         ast::Stmt {
             id: PENDING,
             span: self.span_from(start),

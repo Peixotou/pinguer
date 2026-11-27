@@ -142,7 +142,8 @@ impl Parser<'_> {
         })
     }
 
-    /// `ConstDecl = "const" , IDENT , [ ":" , Type ] , "=" , Expr`
+    /// `ConstDecl = "const" , IDENT , [ ":" , Type ] , "=" , Expr`, and
+    /// `LetDecl` and `VarDecl`, which have the same form.
     pub(crate) fn binding(&mut self, kind: ast::BindingKind) -> PResult<ast::Binding> {
         let keyword = self.cursor.bump();
         let name = self.ident()?;
@@ -152,7 +153,10 @@ impl Parser<'_> {
         } else {
             None
         };
-        if self.at_separator() || self.cursor.at(TokenKind::Eof) {
+        if self.at_separator()
+            || self.cursor.at(TokenKind::Eof)
+            || self.cursor.at(TokenKind::RBrace)
+        {
             let found = self.cursor.current();
             return Err(self.error(
                 Diagnostic::error(format!(

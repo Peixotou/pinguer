@@ -969,3 +969,57 @@ mod expr_statement {
         assert_eq!(parsed.labelled, ["-x"]);
     }
 }
+
+/// `LetDecl = "let" , IDENT , [ ":" , Type ] , "=" , Expr`,
+/// `VarDecl = "var" , …`, and `ConstDecl` inside blocks
+mod local_bindings {
+    use super::*;
+
+    /// The rendered statements of `func f() { <body> }`.
+    fn stmts(body: &str) -> String {
+        let rendered = tree(&format!("func f() {{\n{body}\n}}"));
+        rendered
+            .lines()
+            .skip(2)
+            .map(|line| format!("{}\n", &line[6..]))
+            .collect()
+    }
+
+    #[test]
+    fn let_var_and_const_declare_bindings() {
+        let expected = concat!(
+            "Let #2 @2:1-2:10 x\n",
+            "  Int #3 @2:9-2:10 1 decimal\n",
+            "Var #4 @3:1-3:15 y\n",
+            "  Type #5 @3:8-3:11 int\n",
+            "  Name #6 @3:14-3:15 x\n",
+            "Const #7 @4:1-4:15 Z\n",
+            "  Bool #8 @4:11-4:15 true\n",
+        );
+        assert_eq!(stmts("let x = 1\nvar y: int = x\nconst Z = true"), expected);
+    }
+
+    #[test]
+    fn every_binding_needs_an_initializer() {
+        for text in ["func f() { let x }", "func f() {\n    var y: int\n}"] {
+            let parsed = parse(text);
+            assert_eq!(parsed.codes, ["P2006"], "{text}");
+        }
+        assert_eq!(
+            parse("func f() { var y: int }").messages,
+            ["`var` declaration has no initializer"]
+        );
+    }
+
+    #[test]
+    fn malformed_bindings() {
+        for (text, code) in [
+            ("func f() { let = 1 }", "P2002"),
+            ("func f() { let x: = 1 }", "P2007"),
+            ("func f() { let x 1 }", "P2005"),
+            ("func f() { let x = }", "P2004"),
+        ] {
+            assert_eq!(parse(text).codes, [code], "{text}");
+        }
+    }
+}
