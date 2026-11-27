@@ -9,6 +9,7 @@
 //! [ADR-0028]: https://github.com/Peixotou/pinguer/blob/main/docs/adr/0028-ast-representation.md
 
 mod expr;
+mod item;
 mod stmt;
 mod ty;
 
@@ -17,6 +18,7 @@ use std::fmt;
 use pinguer_source::Span;
 
 pub use expr::{Base, BinaryOp, Expr, ExprKind, Literal, UnaryOp};
+pub use item::{File, Func, Import, Item, ItemKind, Param};
 pub use stmt::{AssignOp, Binding, BindingKind, Block, If, IfBranch, Stmt, StmtKind};
 pub use ty::{Type, TypeKind};
 
