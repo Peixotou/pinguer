@@ -687,3 +687,61 @@ mod cast_expr {
         }
     }
 }
+
+/// `PostfixExpr = PrimaryExpr , { CallSuffix | … }`,
+/// `CallSuffix = "(" , [ ArgList ] , ")"`, `ArgList = Expr , { "," , Expr } , [ "," ]`
+mod call_suffix {
+    use super::*;
+
+    #[test]
+    fn calls_with_any_number_of_arguments() {
+        assert_eq!(shape("f()"), "(call f)");
+        assert_eq!(shape("f(a, b + c)"), "(call f a (b + c))");
+        assert_eq!(shape("f(a,)"), "(call f a)");
+        assert_eq!(shape("f(g(x))"), "(call f (call g x))");
+        assert_eq!(shape("f()()"), "(call (call f))");
+        assert_eq!(shape("(f)(x)"), "(call (paren f) x)");
+    }
+
+    #[test]
+    fn arguments_may_span_lines() {
+        assert_eq!(shape("f(\n    a,\n    b,\n)"), "(call f a b)");
+    }
+
+    #[test]
+    fn calls_bind_more_tightly_than_prefix_operators_and_conversions() {
+        assert_eq!(shape("-f(x)"), "(- (call f x))");
+        assert_eq!(shape("f(x) as int"), "(as (call f x) int)");
+    }
+
+    #[test]
+    fn malformed_argument_lists() {
+        for (text, code, message) in [
+            (
+                "const X = f(",
+                "P2004",
+                "expected expression, found end of file",
+            ),
+            (
+                "const X = f(a",
+                "P2008",
+                "expected `)` to close `(`, found end of file",
+            ),
+            (
+                "const X = f(a b)",
+                "P2008",
+                "expected `)` to close `(`, found identifier `b`",
+            ),
+            ("const X = f(,)", "P2004", "expected expression, found `,`"),
+            (
+                "const X = f(a,,)",
+                "P2004",
+                "expected expression, found `,`",
+            ),
+        ] {
+            let parsed = parse(text);
+            assert_eq!(parsed.codes, [code], "{text}");
+            assert_eq!(parsed.messages, [message], "{text}");
+        }
+    }
+}

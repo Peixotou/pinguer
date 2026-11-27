@@ -2,7 +2,7 @@
 
 use pinguer_ast as ast;
 use pinguer_diagnostics::{Diagnostic, codes};
-use pinguer_lexer::{Keyword, TokenKind};
+use pinguer_lexer::{Keyword, Token, TokenKind};
 
 use crate::ids::PENDING;
 use crate::{PResult, Parser, Reported, literal};
@@ -103,7 +103,7 @@ impl Parser<'_> {
             TokenKind::Minus => ast::UnaryOp::Neg,
             TokenKind::Bang => ast::UnaryOp::Not,
             TokenKind::Tilde => ast::UnaryOp::BitNot,
-            _ => return self.primary(),
+            _ => return self.postfix(),
         };
         let start = self.start();
         self.cursor.bump();
@@ -116,6 +116,40 @@ impl Parser<'_> {
                 operand: Box::new(operand),
             },
         })
+    }
+
+    /// `PostfixExpr = PrimaryExpr , { CallSuffix | MemberSuffix }`
+    fn postfix(&mut self) -> PResult<ast::Expr> {
+        let start = self.start();
+        let mut expr = self.primary()?;
+        while self.cursor.at(TokenKind::LParen) {
+            let open = self.cursor.bump();
+            let args = self.args(open)?;
+            expr = ast::Expr {
+                id: PENDING,
+                span: self.span_from(start),
+                kind: ast::ExprKind::Call {
+                    callee: Box::new(expr),
+                    args,
+                },
+            };
+        }
+        Ok(expr)
+    }
+
+    /// The rest of `CallSuffix = "(" , [ ArgList ] , ")"` after `open`, with
+    /// `ArgList = Expr , { "," , Expr } , [ "," ]`.
+    fn args(&mut self, open: Token) -> PResult<Vec<ast::Expr>> {
+        let mut args = Vec::new();
+        while !self.cursor.at(TokenKind::RParen) {
+            args.push(self.expr()?);
+            if !self.cursor.at(TokenKind::Comma) {
+                break;
+            }
+            self.cursor.bump();
+        }
+        self.expect_closing(open, TokenKind::RParen)?;
+        Ok(args)
     }
 
     /// `PrimaryExpr = INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | CHAR_LITERAL
