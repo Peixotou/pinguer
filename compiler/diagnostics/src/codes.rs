@@ -115,6 +115,10 @@ define_codes! {
 
     /// A token that cannot start a top-level item.
     EXPECTED_ITEM = 2001, "expected `import`, `func` or `const`";
+    /// A token other than an identifier where a name is required.
+    EXPECTED_IDENTIFIER = 2002, "expected identifier";
+    /// Two items or statements on one line without `;` between them.
+    MISSING_SEPARATOR = 2003, "expected a line break or `;`";
 }
 
 #[cfg(test)]

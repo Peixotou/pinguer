@@ -8,6 +8,7 @@
 //! and ADR-0030 (resource limits).
 
 mod cursor;
+mod item;
 mod newline;
 
 use pinguer_ast as ast;
@@ -38,51 +39,102 @@ pub fn parse(
     let mut parser = Parser {
         cursor: Cursor::new(tokens, file, text_len),
         text,
+        file,
         diagnostics,
+        next_id: 0,
     };
     parser.file(Span::new(file, 0, text_len))
 }
 
+/// Records that a diagnostic has been reported for the construct being
+/// parsed. Parse functions return it so that their callers stop and
+/// recover instead of reporting the same problem again.
+struct Reported;
+
+type PResult<T> = Result<T, Reported>;
+
 struct Parser<'a> {
     cursor: Cursor,
     text: &'a str,
+    file: FileId,
     diagnostics: &'a mut Diagnostics,
+    /// The ID the next node gets.
+    next_id: u32,
 }
 
 impl Parser<'_> {
-    /// `File = { Separator } , [ Item , … ] , EOF`
-    fn file(&mut self, span: Span) -> ast::File {
-        self.skip_separators();
-        if !self.cursor.at(TokenKind::Eof) {
+    /// Returns the ID of a new node. IDs are handed out in pre-order: call
+    /// this before parsing the node's children.
+    fn next_id(&mut self) -> ast::NodeId {
+        let id = ast::NodeId::new(self.next_id);
+        self.next_id = self.next_id.saturating_add(1);
+        id
+    }
+
+    /// Returns the span from `start` to the end of the last consumed token,
+    /// or an empty span at `start` if nothing was consumed since.
+    fn span_from(&self, start: u32) -> Span {
+        Span::new(self.file, start, self.cursor.prev_end().max(start))
+    }
+
+    /// Returns the start offset of the current token.
+    fn start(&self) -> u32 {
+        self.cursor.current().span.start
+    }
+
+    /// `IDENT`
+    fn ident(&mut self) -> PResult<ast::Ident> {
+        if self.cursor.at(TokenKind::Ident) {
+            let token = self.cursor.bump();
+            Ok(ast::Ident {
+                name: self.text[token.span.range()].into(),
+                span: token.span,
+            })
+        } else {
             let found = self.cursor.current();
-            self.report(
+            Err(self.error(
                 Diagnostic::error(format!(
-                    "expected `import`, `func` or `const`, found {}",
+                    "expected identifier, found {}",
                     self.describe(found)
                 ))
-                .with_code(codes::EXPECTED_ITEM)
-                .with_primary(found.span, "expected an item"),
-            );
-        }
-        ast::File {
-            span,
-            items: Vec::new(),
-            node_count: 0,
+                .with_code(codes::EXPECTED_IDENTIFIER)
+                .with_primary(found.span, "expected an identifier"),
+            ))
         }
     }
 
-    /// `Separator = NEWLINE | ";"`
-    fn skip_separators(&mut self) {
-        while matches!(
+    /// Returns `true` at a `Separator = NEWLINE | ";"`.
+    fn at_separator(&self) -> bool {
+        matches!(
             self.cursor.kind(),
             TokenKind::Newline | TokenKind::Semicolon
-        ) {
+        )
+    }
+
+    fn skip_separators(&mut self) {
+        while self.at_separator() {
             self.cursor.bump();
         }
     }
 
-    fn report(&mut self, diagnostic: Diagnostic) {
+    /// Reports that the construct just parsed is not followed by a
+    /// separator, the end of its block or the end of the file.
+    fn missing_separator(&mut self, what: &str) -> Reported {
+        let found = self.cursor.current();
+        self.error(
+            Diagnostic::error(format!(
+                "expected a line break or `;` after the {what}, found {}",
+                self.describe(found)
+            ))
+            .with_code(codes::MISSING_SEPARATOR)
+            .with_primary(found.span, "expected a line break or `;` before this")
+            .with_note("each item and statement ends at a line break or `;`"),
+        )
+    }
+
+    fn error(&mut self, diagnostic: Diagnostic) -> Reported {
         self.diagnostics.push(diagnostic);
+        Reported
     }
 
     /// Describes a token the way diagnostics refer to it: `` `func` ``,
@@ -95,49 +147,5 @@ impl Parser<'_> {
             TokenKind::Ident if text.len() <= MAX_QUOTED => format!("identifier `{text}`"),
             kind => kind.to_string(),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use pinguer_source::SourceMap;
-
-    fn parse_text(text: &str) -> (ast::File, Diagnostics) {
-        let mut map = SourceMap::new();
-        let file = map.add("p.pgr", text).unwrap();
-        let mut diagnostics = Diagnostics::new();
-        let tokens = pinguer_lexer::tokenize(file, text, &mut diagnostics);
-        let tree = parse(file, text, tokens, &mut diagnostics);
-        (tree, diagnostics)
-    }
-
-    #[test]
-    fn files_of_separators_have_no_items() {
-        for text in ["", "\n\n", ";;", "// comment\n;\n/* block */\n"] {
-            let (tree, diagnostics) = parse_text(text);
-            assert!(tree.items.is_empty(), "{text:?}");
-            assert!(diagnostics.is_empty(), "{text:?}");
-            assert_eq!(tree.span.range(), 0..text.len());
-        }
-    }
-
-    #[test]
-    fn other_tokens_are_not_items() {
-        let (_, diagnostics) = parse_text("\nlet x = 1");
-        let [diagnostic] = diagnostics.as_slice() else {
-            panic!("{diagnostics:?}");
-        };
-        assert_eq!(diagnostic.code, Some(codes::EXPECTED_ITEM));
-        assert_eq!(
-            diagnostic.message,
-            "expected `import`, `func` or `const`, found `let`"
-        );
-        assert_eq!(diagnostic.labels[0].span.range(), 1..4);
-        let (_, diagnostics) = parse_text("main");
-        assert_eq!(
-            diagnostics.as_slice()[0].message,
-            "expected `import`, `func` or `const`, found identifier `main`"
-        );
     }
 }
