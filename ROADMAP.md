@@ -32,9 +32,11 @@ done only when its criteria are met and CI is green. Dates are not promised.
 
 ### Phase 02 — Parser and AST
 
-* AST with node IDs and spans; parser for the full v0.1 grammar.
+* AST with node IDs and spans; parser for the full v0.1 grammar
+  (ADR-0027 to ADR-0030).
 * Newline handling rules from ADR-0005; reserved-keyword diagnostics.
 * Error recovery at statement and item boundaries.
+* A nesting limit with a tested stack bound, and checked node IDs.
 * `pinguer debug ast <file>`.
 * **Done when:** every production has positive and negative tests, AST
   snapshot tests exist, and the parser survives the robustness corpus.

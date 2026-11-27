@@ -24,8 +24,9 @@ newline-terminated statements. See the
 | Source management (`compiler/source`) | Implemented |
 | Diagnostics, human and JSON (`compiler/diagnostics`) | Implemented |
 | Lexer (`compiler/lexer`) | Implemented |
-| Parser, semantic analysis, code generation | Not started |
-| CLI (`cli`) | `help`, `version` and `debug tokens` only |
+| Syntax tree and parser (`compiler/ast`, `compiler/parser`) | Implemented |
+| Semantic analysis, code generation | Not started |
+| CLI (`cli`) | `help`, `version`, `debug tokens` and `debug ast` only |
 
 The phases toward v0.1.0 are described in [ROADMAP.md](ROADMAP.md).
 
@@ -59,8 +60,9 @@ func main() {
 }
 ```
 
-The only command that processes source code today prints the token stream.
-Its output format is unstable and meant for compiler development:
+The commands that process source code today print the token stream and the
+syntax tree. Their output formats are unstable and meant for compiler
+development:
 
 ```console
 $ cargo run -p pinguer_cli -- debug tokens examples/hello.pgr
@@ -72,6 +74,12 @@ $ cargo run -p pinguer_cli -- debug tokens examples/hello.pgr
 4:1	Keyword(Func)	"func"
 ...
 7:1	Eof	""
+$ cargo run -p pinguer_cli -- debug ast examples/hello.pgr
+File @1:1-7:1 nodes=8
+  Import #0 @2:1-2:14 std.io
+  Func #1 @4:1-6:2 main
+    Block #2 @4:13-6:2
+...
 ```
 
 Lexical errors are reported with stable codes. The diagnostics are written to

@@ -23,6 +23,8 @@ valuable as code.
 | `compiler/source` | Source files, spans, line/column mapping |
 | `compiler/diagnostics` | Diagnostic model, code registry, human and JSON renderers |
 | `compiler/lexer` | Tokens and lexical analysis |
+| `compiler/ast` | Syntax tree data model and its text rendering |
+| `compiler/parser` | Parsing, syntax error recovery and limits |
 | `cli/` | The `pinguer` binary and its end-to-end tests |
 | `examples/` | Example programs in v0.1 syntax |
 

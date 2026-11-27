@@ -13,8 +13,8 @@ fully specified, fully implemented and thoroughly tested.
 | UTF-8 source files, `.pgr` extension | [LEXICAL_STRUCTURE.md](LEXICAL_STRUCTURE.md) | **Implemented** (loading and validation) |
 | Lexical analysis | [LEXICAL_STRUCTURE.md](LEXICAL_STRUCTURE.md) | **Implemented** |
 | Source locations and spans | [COMPILATION_MODEL.md](COMPILATION_MODEL.md) | **Implemented** |
-| Diagnostics (human and JSON) | [docs/architecture/DIAGNOSTICS.md](../docs/architecture/DIAGNOSTICS.md) | **Implemented** (infrastructure; lexical diagnostics only) |
-| Parsing to an AST with error recovery | [GRAMMAR.ebnf](GRAMMAR.ebnf) | Not started |
+| Diagnostics (human and JSON) | [docs/architecture/DIAGNOSTICS.md](../docs/architecture/DIAGNOSTICS.md) | **Implemented** (infrastructure; lexical and syntax diagnostics) |
+| Parsing to an AST with error recovery | [GRAMMAR.ebnf](GRAMMAR.ebnf) | **Implemented** |
 | Name resolution | [LANGUAGE_SPECIFICATION.md §5](LANGUAGE_SPECIFICATION.md#5-declarations-and-bindings-normative-v01) | Not started |
 | Static type checking with local inference | [TYPE_SYSTEM.md](TYPE_SYSTEM.md) | Not started |
 | Primitive types: `bool`, `i8`–`i64`, `u8`–`u64`, `int`, `f32`, `f64`, `char`, `string`, `()` | [TYPE_SYSTEM.md](TYPE_SYSTEM.md) | Not started |
@@ -28,7 +28,7 @@ fully specified, fully implemented and thoroughly tested.
 | `import std.io`; `io.print`, `io.println` | [STANDARD_LIBRARY.md](STANDARD_LIBRARY.md) | Not started |
 | Typed intermediate representation (PIR) | [COMPILATION_MODEL.md](COMPILATION_MODEL.md) | Not started |
 | Native executables through LLVM | [COMPILATION_MODEL.md](COMPILATION_MODEL.md) | Not started (toolchain path validated, see ADR-0003) |
-| CLI: `version`, `help`, `check`, `build`, `run` | [docs/architecture/CLI.md](../docs/architecture/CLI.md) | `version`, `help` and `debug tokens` implemented |
+| CLI: `version`, `help`, `check`, `build`, `run` | [docs/architecture/CLI.md](../docs/architecture/CLI.md) | `version`, `help`, `debug tokens` and `debug ast` implemented |
 | Automated tests and cross-platform CI | [docs/architecture/TESTING_STRATEGY.md](../docs/architecture/TESTING_STRATEGY.md) | Implemented for existing components |
 | Build documentation | [docs/BUILDING.md](../docs/BUILDING.md) | Implemented |
 

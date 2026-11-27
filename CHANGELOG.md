@@ -37,6 +37,17 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   are counted and summarized by a `P0004` note in both formats.
 - Scalability tests with inputs of up to 5 MB and a front-end benchmark
   (`cargo bench -p pinguer_cli --bench scalability`).
+- `pinguer_ast`, the syntax tree with node IDs and spans, and its
+  deterministic text rendering.
+- `pinguer_parser`, a parser for the complete v0.1 grammar: precedence
+  climbing with one node per operator chain, literal decoding, the layout
+  rules for `{` and `else`, error recovery at statement and item
+  boundaries, syntax diagnostics `P2001`–`P2020` and a nesting limit of
+  256 with a tested stack bound. ADR-0027 to ADR-0030 record the design.
+- `pinguer debug ast <file>`, which prints the syntax tree; its output
+  format is not stable.
+- Grammar conformance, precedence, limit, snapshot and robustness tests for
+  the parser, and parsing phases in the scalability tests and benchmark.
 
 ### Fixed
 

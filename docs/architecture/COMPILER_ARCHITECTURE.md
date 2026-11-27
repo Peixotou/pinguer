@@ -18,7 +18,8 @@ reasoning behind the structure is in the [ADRs](../adr/README.md).
                 └─────────┬──────────┘
                           ▼
                 ┌────────────────────┐
-                │ parser             │ AST with NodeIds, syntax recovery     [planned: compiler/parser]
+                │ pinguer_parser     │ pinguer_ast::File with NodeIds,       [implemented]
+                │                    │ syntax error recovery
                 └─────────┬──────────┘
                           ▼
                 ┌────────────────────┐
@@ -61,6 +62,8 @@ Existing crates:
 | `compiler/source` | `pinguer_source` | Implemented | — |
 | `compiler/diagnostics` | `pinguer_diagnostics` | Implemented | source |
 | `compiler/lexer` | `pinguer_lexer` | Implemented | source, diagnostics |
+| `compiler/ast` | `pinguer_ast` | Implemented: syntax tree, node IDs, text rendering ([ADR-0028](../adr/0028-ast-representation.md)) | source |
+| `compiler/parser` | `pinguer_parser` | Implemented: tokens to AST, recovery and limits ([ADR-0027](../adr/0027-parser-architecture.md) to [ADR-0030](../adr/0030-parser-resource-limits.md)) | source, diagnostics, lexer, ast |
 | `cli` | `pinguer_cli` (binary `pinguer`) | Partially implemented | all stages |
 
 Planned components. A directory is created together with its first real code
@@ -69,9 +72,8 @@ names below are the intended locations, not existing directories.
 
 | Directory | Phase | Role | Depends on |
 |---|---|---|---|
-| `compiler/parser` | 02 | Tokens to AST, with recovery at statement and item boundaries ([GRAMMAR.ebnf](../../specifications/GRAMMAR.ebnf)). Whether the AST data model gets its own `compiler/ast` crate is decided when the parser is written. | lexer |
-| `compiler/semantic` | 03 | Name resolution, scopes, definite-return and `break`/`continue` checks, producing side tables keyed by AST node IDs | parser |
-| `compiler/types` | 03 | Type representation, literal typing and type checking ([TYPE_SYSTEM.md](../../specifications/TYPE_SYSTEM.md)). May be merged with `compiler/semantic` if the boundary proves artificial. | parser |
+| `compiler/semantic` | 03 | Name resolution, scopes, definite-return and `break`/`continue` checks, producing side tables keyed by AST node IDs | ast |
+| `compiler/types` | 03 | Type representation, literal typing and type checking ([TYPE_SYSTEM.md](../../specifications/TYPE_SYSTEM.md)). May be merged with `compiler/semantic` if the boundary proves artificial. | ast |
 | `compiler/ir` | 04 | PIR: typed, target-independent control-flow graph ([ADR-0004](../adr/0004-intermediate-representations.md)) | semantic |
 | `compiler/codegen` | 04 | PIR to textual LLVM IR, driving `clang` ([ADR-0003](../adr/0003-llvm-via-textual-ir-and-clang.md)) | ir |
 | `runtime` | 04 | Entry point, output buffering, number formatting and trap reporting; the implementation strategy is an open question in ADR-0003 | — |
@@ -98,8 +100,9 @@ Each stage reports as many independent errors as possible:
 
 * the lexer produces tokens for invalid input
   ([LEXICAL_STRUCTURE.md §7](../../specifications/LEXICAL_STRUCTURE.md#7-error-recovery));
-* the parser will use synchronization at statement and item boundaries
-  (`NEWLINE`, `;`, `}`, and item keywords) and produce error nodes;
+* the parser synchronizes at statement and item boundaries (`NEWLINE`,
+  `;`, `}`, and item keywords at the start of a line) and produces error
+  nodes ([ADR-0029](../adr/0029-parser-error-recovery.md));
 * the type checker will assign an *error type* to ill-typed expressions and
   suppress diagnostics that would only be consequences of earlier errors.
 

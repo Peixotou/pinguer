@@ -11,7 +11,7 @@
 * Expected output is written out in full in the test (snapshot style), so
   that any change in diagnostics or token streams is a visible diff in review.
 
-## 2. Current test suite (Phase 01.5)
+## 2. Current test suite (Phase 02)
 
 | Layer | Location | What it covers |
 |---|---|---|
@@ -19,10 +19,16 @@
 | Unit | `compiler/diagnostics/src/*.rs` | Code registry uniqueness and ranges; the diagnostic limit and suppression notice; human renderer layout (gutters, multiple labels, multiple files, tabs, empty and multi-line spans, cut excerpts of long lines); escaping of every invisible-character range; JSON rendering and escaping, including surrogate pairs |
 | Unit | `compiler/lexer/src/token.rs` | Keyword table consistency |
 | Integration | `compiler/lexer/tests/lexer.rs` | Every token kind, newline significance rules, every lexical diagnostic, recovery after errors (including `Unknown` tokens for rejected characters), source ordering of diagnostics, the diagnostic limit |
+| Unit | `compiler/ast/src/render.rs` | Rendering of every node kind, escaping of names and values, spans |
+| Unit | `compiler/parser/src/*.rs` | Token cursor, the line-break filter, literal decoding (bases, separators, escapes, values that do not fit), node numbering and running out of IDs |
+| Integration | `compiler/parser/tests/grammar.rs` | One module per production of GRAMMAR.ebnf, which makes the module list the traceability matrix between the grammar and the tests: the rendered tree of valid input and the diagnostics of malformed input, every `P2xxx` diagnostic, recovery at statement and item boundaries, and every pair of adjacent operators checked against OPERATORS.md |
+| Integration | `compiler/parser/tests/limits.rs` | The nesting limit for every kind of construct, at and past the limit; the stack guarantee of ADR-0030 on a 1 MiB thread; 10,000 nesting levels and unclosed delimiters; unlimited lists |
+| Snapshot | `compiler/parser/tests/examples.rs` | The trees of the programs in `examples/`, compared with `compiler/parser/tests/snapshots/` |
+| Property | `compiler/parser/tests/robustness.rs` | 8,000 pseudo-random token sequences, every truncation and every single-token deletion of the examples, and 2,000 generated valid programs: no panics, dense pre-order node IDs, error nodes only with diagnostics, at most one parser diagnostic per token, determinism, and no diagnostics for valid programs |
 | Property | `compiler/lexer/tests/robustness.rs` | 9,000 pseudo-random inputs plus deep nesting: no panics, span invariants, newline invariants, determinism, and limited lexing reporting a prefix of unlimited lexing |
-| End-to-end | `cli/tests/cli.rs` | Running the `pinguer` binary: version, help, unavailable commands, usage errors in both formats, arguments that are not valid Unicode, token listing, a closed standard output, human and JSON diagnostics, the diagnostic limit, missing, non-UTF-8 and directory inputs |
-| Scalability | `cli/tests/scalability.rs` | Inputs of up to 5 MB: diagnostic output independent of input size, narrow excerpts on long lines, exact positions deep inside long Unicode lines and after many lines. No timings are asserted. |
-| Benchmark | `cli/benches/scalability.rs` | Not a test: times reading, loading, indexing, lexing, position lookup, diagnostic rendering and listing separately for inputs from 10 KB to 10 MB, and prints the growth per doubling |
+| End-to-end | `cli/tests/cli.rs` | Running the `pinguer` binary: version, help, unavailable commands, usage errors in both formats, arguments that are not valid Unicode, token listing, the syntax tree of valid and invalid files, deep nesting, a closed standard output, human and JSON diagnostics, the diagnostic limit, missing, non-UTF-8 and directory inputs |
+| Scalability | `cli/tests/scalability.rs` | Inputs of up to 5 MB: lexical and syntax diagnostic output independent of input size, narrow excerpts on long lines, exact positions deep inside long Unicode lines and after many lines, a chain of a million operands and a hundred thousand functions parsed completely. No timings are asserted. |
+| Benchmark | `cli/benches/scalability.rs` | Not a test: times reading, loading, indexing, lexing, parsing, rendering and dropping the tree, position lookup, diagnostic rendering and listing separately for inputs from 10 KB to 10 MB, and prints the growth per doubling |
 
 Commands:
 
@@ -42,9 +48,8 @@ on the input size.
 
 | Layer | When | Approach |
 |---|---|---|
-| Parser tests and AST snapshots | Phase 02 | Pretty-printed AST compared against expected text; malformed input for every production |
 | Type-checking tests | Phase 03 | A directory of `.pgr` files annotated with expected diagnostics (`// error[P4001]` comments), checked by a harness |
-| Diagnostic snapshots | Phase 02+ | Full rendered output of every diagnostic |
+| Diagnostic snapshots | Phase 03+ | Full rendered output of every diagnostic; today, tests check the code, message and labels of each |
 | Compile-and-run tests | Phase 04 | Programs with expected stdout, stderr and exit status, run on every CI platform; includes one test per trap condition |
 | LLVM IR snapshots | Phase 04 | Generated `.ll` for small programs |
 | Fuzzing | Before v0.1.0 | `cargo-fuzz` (libFuzzer) targets for the lexer and parser; at least 24 CPU-hours per target before release |

@@ -27,6 +27,7 @@ The `pinguer` executable is written to `target/debug/pinguer` (or
 ```sh
 cargo run -p pinguer_cli -- --version
 cargo run -p pinguer_cli -- debug tokens examples/hello.pgr
+cargo run -p pinguer_cli -- debug ast examples/hello.pgr
 ```
 
 ## Platform notes

@@ -3,7 +3,8 @@
 
   Status: Normative (v0.1), except for the section "Future productions",
   which is non-normative and records proposals only.
-  Implementation: not started (the parser is the next milestone).
+  Implementation: compiler/parser (ADR-0027 to ADR-0030). The conformance
+  tests in compiler/parser/tests/grammar.rs have one module per production.
 
   Notation: ISO/IEC 14977 EBNF.
     =   definition          ,   concatenation      ;   end of rule

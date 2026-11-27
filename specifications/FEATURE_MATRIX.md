@@ -22,13 +22,13 @@ Implementation columns: **Yes** implemented and tested · **·** not started ·
 | Feature | Class | Target | Spec | ADR | Lexer | Parser | Types | PIR |
 |---|---|---|---|---|---|---|---|---|
 | UTF-8 source, comments, identifiers, literals | Normative | v0.1 | [LEXICAL_STRUCTURE](LEXICAL_STRUCTURE.md) | 0009 | Yes | — | — | — |
-| Newline-terminated statements | Normative | v0.1 | [LANGUAGE_SPECIFICATION §4](LANGUAGE_SPECIFICATION.md#4-statements-and-termination-normative-v01) | 0005 | Yes | · | — | — |
-| Leading `.` continues a line | Normative | v0.1 | [OPERATORS §8](OPERATORS.md#8-line-continuation) | 0014 | Yes | · | — | — |
-| `let`, `var`, `const`, functions, `if`, `while`, `break`, `continue`, `return` | Normative | v0.1 | [LANGUAGE_SPECIFICATION](LANGUAGE_SPECIFICATION.md) | — | Yes | · | · | · |
+| Newline-terminated statements | Normative | v0.1 | [LANGUAGE_SPECIFICATION §4](LANGUAGE_SPECIFICATION.md#4-statements-and-termination-normative-v01) | 0005 | Yes | Yes | — | — |
+| Leading `.` continues a line | Normative | v0.1 | [OPERATORS §8](OPERATORS.md#8-line-continuation) | 0014 | Yes | Yes | — | — |
+| `let`, `var`, `const`, functions, `if`, `while`, `break`, `continue`, `return` | Normative | v0.1 | [LANGUAGE_SPECIFICATION](LANGUAGE_SPECIFICATION.md) | — | Yes | Yes | · | · |
 | Primitive types `bool`, `i8`–`i64`, `u8`–`u64`, `int`, `f32`, `f64`, `char`, `string` | Normative | v0.1 | [TYPE_SYSTEM §2](TYPE_SYSTEM.md#2-primitive-types) | — | — | — | · | · |
-| v0.1 operators and `as` | Normative | v0.1 | [OPERATORS](OPERATORS.md) | 0007 | Yes | · | · | · |
+| v0.1 operators and `as` | Normative | v0.1 | [OPERATORS](OPERATORS.md) | 0007 | Yes | Yes | · | · |
 | Traps | Normative | v0.1 | [ERROR_HANDLING §2](ERROR_HANDLING.md#2-traps-normative-v01) | 0007 | — | — | — | · |
-| `import std.io`; `io.print`, `io.println` | Normative | v0.1 | [STANDARD_LIBRARY §2](STANDARD_LIBRARY.md#2-the-v01-standard-library-normative-v01) | — | Yes | · | · | · |
+| `import std.io`; `io.print`, `io.println` | Normative | v0.1 | [STANDARD_LIBRARY §2](STANDARD_LIBRARY.md#2-the-v01-standard-library-normative-v01) | — | Yes | Yes | · | · |
 | `i128`, `u128`, `byte` | Planned | v0.2 | [TYPE_SYSTEM §9](TYPE_SYSTEM.md#9-planned-type-constructors-and-types) | 0016 | — | — | · | · |
 | `**`, `**=` | Planned | v0.2 | [OPERATORS §3](OPERATORS.md#3-power--and--planned) | 0017 | Yes | · | · | · |
 | Structs, enums, methods | Planned | v0.2 | [OBJECT_MODEL](OBJECT_MODEL.md) | 0011 | Yes | · | · | · |
@@ -48,7 +48,9 @@ Implementation columns: **Yes** implemented and tested · **·** not started ·
 | Compile-time execution (`comptime`) | Proposal | v0.5+ | [METAPROGRAMMING §2](METAPROGRAMMING.md#2-compile-time-execution-proposal) | pending | Yes | · | · | · |
 
 "Yes" in the Lexer column of a future feature means that its keywords and
-tokens are already recognised (reserved), not that the feature works.
+tokens are already recognised (reserved), not that the feature works. The
+parser reports such tokens as syntax that a later version adds (`P2010`) and
+the reserved keywords as reserved (`P2017`).
 
 ## 3. Attributes and library
 
