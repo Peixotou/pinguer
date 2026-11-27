@@ -49,8 +49,9 @@ Implementation columns: **Yes** implemented and tested · **·** not started ·
 
 "Yes" in the Lexer column of a future feature means that its keywords and
 tokens are already recognised (reserved), not that the feature works. The
-parser reports such tokens as syntax that a later version adds (`P2010`) and
-the reserved keywords as reserved (`P2017`).
+parser reports such tokens as syntax that a later version adds (`P2010`), as
+it does generic parameter and type argument lists in declarations, and the
+reserved keywords as reserved (`P2017`).
 
 ## 3. Attributes and library
 

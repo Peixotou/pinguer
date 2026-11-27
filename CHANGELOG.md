@@ -48,6 +48,21 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   format is not stable.
 - Grammar conformance, precedence, limit, snapshot and robustness tests for
   the parser, and parsing phases in the scalability tests and benchmark.
+- Generic parameter and type argument lists in declarations are reported
+  as not supported (`P2010`); `f<T>(x)`, parsed as comparisons, gets a note.
+- Unclosed delimiters closed at the same token are reported as one
+  diagnostic, with at most eight marked delimiters and a count.
+
+### Changed
+
+- The syntax tree stores lists as boxed slices, integer literals as two
+  64-bit halves and the type of a conversion and of a binding annotation
+  boxed, which reduced its heap by 54–72% per node on 10 MB inputs
+  (ADR-0028). The tokens are freed before node numbering.
+
+### Removed
+
+- `TypeKind::Error`, which the parser never produced.
 
 ### Fixed
 
