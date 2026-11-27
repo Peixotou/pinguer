@@ -266,7 +266,7 @@ impl<W: Write> Renderer<'_, W> {
                     Base::Hexadecimal => "hexadecimal",
                 };
                 let data = match value {
-                    Some(value) => format!("{value} {base}"),
+                    Some(value) => format!("{} {base}", value.get()),
                     None => format!("more-than-128-bits {base}"),
                 };
                 self.line(depth, "Int", id, span, &data)
@@ -355,7 +355,7 @@ mod tests {
             17,
             19,
             ExprKind::Literal(Literal::Int {
-                value: Some(255),
+                value: Some(crate::IntValue::new(255)),
                 base: Base::Hexadecimal,
             }),
         );
@@ -420,7 +420,7 @@ mod tests {
                 span: b.span(45, 53),
                 kind: ExprKind::Cast {
                     operand: Box::new(cast_operand),
-                    ty: cast_ty,
+                    ty: Box::new(cast_ty),
                 },
             };
             let assign = Stmt {

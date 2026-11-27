@@ -220,7 +220,10 @@ impl Parser<'_> {
             self.wrap()?;
             self.cursor.bump();
             let ty = self.ty()?;
-            self.enclose(start, expr, |operand| ast::ExprKind::Cast { operand, ty });
+            self.enclose(start, expr, |operand| ast::ExprKind::Cast {
+                operand,
+                ty: Box::new(ty),
+            });
         }
         Ok(())
     }
@@ -280,9 +283,10 @@ impl Parser<'_> {
             TokenKind::Int => {
                 let token = self.cursor.bump();
                 match literal::decode_int(&self.text[token.span.range()]) {
-                    Some((value, base)) => {
-                        ast::ExprKind::Literal(ast::Literal::Int { value, base })
-                    }
+                    Some((value, base)) => ast::ExprKind::Literal(ast::Literal::Int {
+                        value: value.map(ast::IntValue::new),
+                        base,
+                    }),
                     None => ast::ExprKind::Error,
                 }
             }

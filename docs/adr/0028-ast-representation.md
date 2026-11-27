@@ -26,6 +26,12 @@ server will reuse it ([COMPILER_ARCHITECTURE.md §3.6](../architecture/COMPILER_
   memory of the tree. Measured with a counting allocator on 10 MB inputs,
   boxed slices reduced the heap of the tree from 144–228 to 78–92 bytes
   per node, at the cost of one shrinking reallocation per list.
+* Expressions are 64 bytes on 64-bit targets. An integer literal stores its
+  value as two `u64` halves (`IntValue`), because a `u128` field would align
+  every expression to 16 bytes, and a conversion boxes its target type,
+  which is rare. Together they reduced the tree by another 15–18% per node,
+  without more allocations in code without conversions. A test checks the
+  sizes.
 * Node kinds are enums over the v0.1 constructs only: items (`import`,
   function, constant), statements, expressions and types. Each kind exists
   because the grammar has it; nothing is added for planned features.

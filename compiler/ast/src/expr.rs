@@ -1,5 +1,7 @@
 //! Expressions.
 
+use std::fmt;
+
 use pinguer_source::Span;
 
 use crate::{Ident, NodeId, Type};
@@ -46,8 +48,9 @@ pub enum ExprKind {
     Cast {
         /// The value converted.
         operand: Box<Expr>,
-        /// The target type.
-        ty: Type,
+        /// The target type, boxed because conversions are rare and an inline
+        /// type would enlarge every expression.
+        ty: Box<Type>,
     },
     /// A call, `callee(args)`.
     Call {
@@ -210,7 +213,7 @@ pub enum Literal {
     /// decided by the type checker.
     Int {
         /// The value, or `None` if it needs more than 128 bits.
-        value: Option<u128>,
+        value: Option<IntValue>,
         /// The base it was written in.
         base: Base,
     },
@@ -224,6 +227,39 @@ pub enum Literal {
     Char(char),
     /// `true` or `false`.
     Bool(bool),
+}
+
+/// The value of an integer literal, up to 128 bits.
+///
+/// Stored as two halves: a `u128` field would raise the alignment, and with
+/// it the size, of every expression to 16 bytes.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct IntValue {
+    high: u64,
+    low: u64,
+}
+
+impl IntValue {
+    /// Stores `value`.
+    #[must_use]
+    pub const fn new(value: u128) -> Self {
+        Self {
+            high: (value >> 64) as u64,
+            low: value as u64,
+        }
+    }
+
+    /// Returns the value.
+    #[must_use]
+    pub const fn get(self) -> u128 {
+        (self.high as u128) << 64 | self.low as u128
+    }
+}
+
+impl fmt::Debug for IntValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.get())
+    }
 }
 
 /// The base of an integer literal.
@@ -283,5 +319,32 @@ mod tests {
             .map(Base::radix)
             .collect();
         assert_eq!(radixes, [2, 8, 10, 16]);
+    }
+
+    #[test]
+    fn integer_values_keep_all_128_bits() {
+        for value in [
+            0,
+            1,
+            u128::from(u64::MAX),
+            1 << 64,
+            u128::MAX - 1,
+            u128::MAX,
+        ] {
+            assert_eq!(IntValue::new(value).get(), value);
+        }
+        assert_eq!(
+            format!("{:?}", IntValue::new(1 << 100)),
+            (1u128 << 100).to_string()
+        );
+    }
+
+    /// The sizes that the layout of expressions was chosen for (ADR-0028).
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn expression_sizes() {
+        assert_eq!(size_of::<Expr>(), 64);
+        assert_eq!(size_of::<Literal>(), 32);
+        assert_eq!(size_of::<BinaryOperand>(), 80);
     }
 }
