@@ -42,9 +42,8 @@ struct Outcome {
     /// The start of the primary label of every diagnostic, lexical ones
     /// included.
     diagnostic_starts: Vec<Position>,
-    /// The primary span of every parser diagnostic, as a byte range, and
-    /// whether it reports an unclosed delimiter.
-    parser_spans: Vec<((u32, u32), bool)>,
+    /// The primary span of every parser diagnostic, as a byte range.
+    parser_spans: Vec<(u32, u32)>,
     /// The start of every token other than a line break, in order; the last
     /// one is the end of the file.
     token_starts: Vec<Position>,
@@ -83,11 +82,7 @@ fn parse(text: &str) -> Outcome {
         parser_spans: diagnostics
             .iter()
             .filter(|d| d.code.is_some_and(|code| code.number() / 1000 == 2))
-            .filter_map(|d| {
-                let span = primary(d)?;
-                let unclosed = d.code == Some(pinguer_diagnostics::codes::UNCLOSED_DELIMITER);
-                Some(((span.start, span.end), unclosed))
-            })
+            .filter_map(|d| primary(d).map(|span| (span.start, span.end)))
             .collect(),
         token_starts,
     }
@@ -148,12 +143,12 @@ fn check(text: &str, context: &dyn Fn() -> String) -> Outcome {
         );
     }
 
-    // No two parser diagnostics blame the same span, except unclosed
-    // delimiters, each of which names a different opening one (ADR-0029).
+    // No two parser diagnostics blame the same span (ADR-0029); unclosed
+    // delimiters closed at the same token are reported together.
     let mut seen = std::collections::HashSet::new();
-    for &(span, unclosed) in &outcome.parser_spans {
+    for &span in &outcome.parser_spans {
         assert!(
-            seen.insert(span) || unclosed,
+            seen.insert(span),
             "two diagnostics at {span:?}: {:?}: {}",
             outcome.codes,
             context()

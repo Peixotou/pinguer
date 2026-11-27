@@ -18,7 +18,7 @@ mod stmt;
 mod ty;
 
 use pinguer_ast as ast;
-use pinguer_diagnostics::{Diagnostic, Diagnostics, codes};
+use pinguer_diagnostics::{Diagnostic, Diagnostics, LabelStyle, codes};
 use pinguer_lexer::{Token, TokenKind};
 use pinguer_source::{FileId, Span};
 
@@ -64,8 +64,10 @@ fn parse_with_id_capacity(
         depth: 0,
         deepest: 0,
         last_error: None,
+        unclosed: None,
     };
     let mut tree = parser.file(Span::new(file, 0, text_len));
+    parser.flush_unclosed();
     // The tree holds everything later stages need from the tokens: free
     // them before numbering.
     drop(parser.cursor);
@@ -103,9 +105,59 @@ struct Parser<'a> {
     /// The deepest level reached in the chain being measured; see
     /// [`Parser::open_chain`].
     deepest: u32,
-    /// The primary span of the last reported diagnostic, and whether that
-    /// diagnostic reported an unclosed delimiter; see [`Parser::error`].
-    last_error: Option<(Span, bool)>,
+    /// The primary span of the last reported diagnostic; see
+    /// [`Parser::error`].
+    last_error: Option<Span>,
+    /// The last unclosed-delimiter diagnostic, which the delimiters that
+    /// enclose it may still join; see [`Unclosed`].
+    unclosed: Option<Unclosed>,
+}
+
+/// An unclosed-delimiter diagnostic and the enclosing delimiters closed at
+/// the same token, such as the blocks still open at the end of the file
+/// (ADR-0029). They are reported together: the first delimiter as usual,
+/// the others as secondary labels, of which at most
+/// [`Unclosed::MAX_LABELS`] are shown.
+struct Unclosed {
+    diagnostic: Diagnostic,
+    delimiters: usize,
+}
+
+impl Unclosed {
+    /// Enough for the nesting of real code, while the excerpt of a deeply
+    /// nested file stays short.
+    const MAX_LABELS: usize = 8;
+
+    /// Adds the opening delimiter that `other`, a diagnostic about the same
+    /// token, reports.
+    fn join(&mut self, other: Diagnostic) {
+        self.delimiters += 1;
+        let shown = self.diagnostic.labels.len() - 1;
+        if shown < Self::MAX_LABELS {
+            self.diagnostic.labels.extend(
+                other
+                    .labels
+                    .into_iter()
+                    .filter(|label| label.style == LabelStyle::Secondary),
+            );
+        }
+    }
+
+    fn finish(self) -> Diagnostic {
+        let Self {
+            mut diagnostic,
+            delimiters,
+        } = self;
+        if delimiters > 1 {
+            let hidden = delimiters - (diagnostic.labels.len() - 1);
+            diagnostic = diagnostic.with_note(if hidden == 0 {
+                format!("{delimiters} delimiters are not closed")
+            } else {
+                format!("{delimiters} delimiters are not closed; {hidden} of them are not marked")
+            });
+        }
+        diagnostic
+    }
 }
 
 impl Parser<'_> {
@@ -267,8 +319,9 @@ impl Parser<'_> {
     /// A diagnostic that blames the same span as the previous one is not
     /// reported either: it is a consequence of the first, as when the
     /// construct completed at a `}` (see [`Parser::expect_closing`]) still
-    /// lacks something there. Unclosed delimiters are the exception, since
-    /// each one reports a different opening delimiter.
+    /// lacks something there. Unclosed delimiters closed at the same token
+    /// are the exception: each names a different opening delimiter, and
+    /// they are reported together (see [`Unclosed`]).
     fn error(&mut self, diagnostic: Diagnostic) -> Reported {
         let current = self.cursor.current();
         let primary = diagnostic.main_label().map(|label| label.span);
@@ -289,15 +342,30 @@ impl Parser<'_> {
             _ => diagnostic,
         };
         let unclosed = diagnostic.code == Some(codes::UNCLOSED_DELIMITER);
-        if let (Some(span), Some((last, last_unclosed))) = (primary, self.last_error)
-            && span == last
-            && !(unclosed && last_unclosed)
-        {
+        if primary.is_some() && primary == self.last_error {
+            if unclosed && let Some(group) = &mut self.unclosed {
+                group.join(diagnostic);
+            }
             return Reported;
         }
-        self.last_error = primary.map(|span| (span, unclosed));
-        self.diagnostics.push(diagnostic);
+        self.flush_unclosed();
+        self.last_error = primary;
+        if unclosed {
+            self.unclosed = Some(Unclosed {
+                diagnostic,
+                delimiters: 1,
+            });
+        } else {
+            self.diagnostics.push(diagnostic);
+        }
         Reported
+    }
+
+    /// Reports the unclosed delimiters collected so far.
+    fn flush_unclosed(&mut self) {
+        if let Some(group) = self.unclosed.take() {
+            self.diagnostics.push(group.finish());
+        }
     }
 
     /// Describes a token the way diagnostics refer to it: `` `func` ``,

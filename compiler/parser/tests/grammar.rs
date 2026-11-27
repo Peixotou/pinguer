@@ -1646,8 +1646,8 @@ mod missing_closing_delimiter {
     #[test]
     fn a_construct_before_a_closing_brace_is_kept() {
         let parsed = parse("func f() {\n    g(a, (b\n}");
-        assert_eq!(parsed.codes, ["P2008", "P2008"]);
-        assert_eq!(parsed.labelled, ["}", "}"]);
+        assert_eq!(parsed.codes, ["P2008"]);
+        assert_eq!(parsed.labelled, ["}"]);
         assert!(parsed.tree.contains("Call #"), "{}", parsed.tree);
         assert!(!parsed.tree.contains("Error"), "{}", parsed.tree);
     }
@@ -1655,8 +1655,8 @@ mod missing_closing_delimiter {
     #[test]
     fn constructs_at_the_end_of_the_file_are_kept() {
         let parsed = parse("func f() {\n    if x {\n        g()\n");
-        assert_eq!(parsed.codes, ["P2008", "P2008"]);
-        assert_eq!(parsed.labelled, ["", ""]);
+        assert_eq!(parsed.codes, ["P2008"]);
+        assert_eq!(parsed.labelled, [""]);
         assert!(parsed.tree.contains("If #"), "{}", parsed.tree);
         assert!(!parsed.tree.contains("Error"), "{}", parsed.tree);
     }
@@ -1794,10 +1794,56 @@ mod one_diagnostic_per_problem {
         }
     }
 
+    /// Returns the diagnostics of `text`, unrendered.
+    fn diagnostics(text: &str) -> Vec<pinguer_diagnostics::Diagnostic> {
+        let mut map = SourceMap::new();
+        let file = map.add("d.pgr", text).unwrap();
+        let mut diagnostics = Diagnostics::new();
+        let tokens = pinguer_lexer::tokenize(file, text, &mut diagnostics);
+        drop(pinguer_parser::parse(file, text, tokens, &mut diagnostics));
+        diagnostics.iter().cloned().collect()
+    }
+
     #[test]
-    fn each_unclosed_delimiter_is_still_reported() {
-        let parsed = parse("func f() {\n    g(a, (b\n}");
-        assert_eq!(parsed.codes, ["P2008", "P2008"]);
+    fn unclosed_delimiters_closed_at_the_same_token_are_reported_together() {
+        let text = "func f() {\n    if x {\n        g(a, (b\n";
+        let reported = diagnostics(text);
+        assert_eq!(reported.len(), 1);
+        let unclosed = &reported[0];
+        assert_eq!(
+            unclosed.message,
+            "expected `)` to close `(`, found end of file"
+        );
+        // The four openers, innermost first.
+        let openers: Vec<u32> = unclosed.labels[1..]
+            .iter()
+            .map(|label| label.span.start)
+            .collect();
+        let at = |pattern: &str| text.find(pattern).unwrap() as u32;
+        assert_eq!(
+            openers,
+            [at("(b"), at("(a"), at("{\n        g"), at("{\n    if")]
+        );
+        assert_eq!(unclosed.notes, ["4 delimiters are not closed"]);
+    }
+
+    #[test]
+    fn the_marked_delimiters_are_limited_and_the_rest_counted() {
+        let text = format!("func f() {{\n    g({}", "(".repeat(20));
+        let reported = diagnostics(&text);
+        assert_eq!(reported.len(), 1);
+        assert_eq!(reported[0].labels.len(), 1 + 8);
+        assert_eq!(
+            reported[0].notes,
+            ["22 delimiters are not closed; 14 of them are not marked"]
+        );
+    }
+
+    #[test]
+    fn unclosed_delimiters_at_different_tokens_are_reported_separately() {
+        let reported = diagnostics("func f() {\n    g(a\n}\nfunc h() {\n    k(b\n}");
+        assert_eq!(reported.len(), 2);
+        assert!(reported.iter().all(|d| d.notes.is_empty()));
     }
 }
 

@@ -202,12 +202,10 @@ fn ten_thousand_unclosed_delimiters_terminate() {
             let codes = parse_render_drop(&text);
             assert_eq!(codes.len(), 1, "{codes:?}");
         }
-        // Every block that reaches the end of the file is unclosed and
-        // reported, up to the limit.
+        // The blocks open at the end of the file, up to the limit, are
+        // reported together.
         let codes = parse_render_drop(&format!("func f() {}", "{".repeat(10_000)));
-        assert_eq!(codes[0], "P2019");
-        assert_eq!(codes.len(), 1 + MAX_NESTING as usize, "{codes:?}");
-        assert!(codes[1..].iter().all(|code| code == "P2008"));
+        assert_eq!(codes, ["P2019", "P2008"]);
     });
 }
 
