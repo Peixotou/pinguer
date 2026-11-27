@@ -8,6 +8,7 @@
 //! and ADR-0030 (resource limits).
 
 mod cursor;
+mod newline;
 
 use pinguer_ast as ast;
 use pinguer_diagnostics::{Diagnostic, Diagnostics, codes};
@@ -29,9 +30,10 @@ use cursor::Cursor;
 pub fn parse(
     file: FileId,
     text: &str,
-    tokens: Vec<Token>,
+    mut tokens: Vec<Token>,
     diagnostics: &mut Diagnostics,
 ) -> ast::File {
+    newline::remove_ignored_newlines(&mut tokens);
     let text_len = u32::try_from(text.len()).expect("source text exceeds the maximum file size");
     let mut parser = Parser {
         cursor: Cursor::new(tokens, file, text_len),
