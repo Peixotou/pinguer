@@ -39,8 +39,20 @@ pub use nesting::MAX_NESTING;
 pub fn parse(
     file: FileId,
     text: &str,
+    tokens: Vec<Token>,
+    diagnostics: &mut Diagnostics,
+) -> ast::File {
+    parse_with_id_capacity(file, text, tokens, diagnostics, ids::CAPACITY)
+}
+
+/// [`parse`], with IDs for at most `id_capacity` nodes, so that tests can
+/// reach the limit with small inputs.
+fn parse_with_id_capacity(
+    file: FileId,
+    text: &str,
     mut tokens: Vec<Token>,
     diagnostics: &mut Diagnostics,
+    id_capacity: u32,
 ) -> ast::File {
     newline::remove_ignored_newlines(&mut tokens);
     let text_len = u32::try_from(text.len()).expect("source text exceeds the maximum file size");
@@ -53,7 +65,19 @@ pub fn parse(
         deepest: 0,
     };
     let mut tree = parser.file(Span::new(file, 0, text_len));
-    ids::number(&mut tree);
+    if ids::number(&mut tree, id_capacity).is_err() {
+        // ADR-0030: stop instead of reusing or wrapping IDs.
+        parser.error(
+            Diagnostic::error("the file has too many syntax tree nodes")
+                .with_code(codes::TOO_MANY_NODES)
+                .with_note(format!(
+                    "the parser numbers nodes with 32-bit IDs and cannot number more than \
+                     {id_capacity}"
+                )),
+        );
+        tree.items.clear();
+        tree.node_count = 0;
+    }
     tree
 }
 
@@ -273,4 +297,24 @@ fn is_closing_delimiter(kind: TokenKind) -> bool {
         kind,
         TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pinguer_source::SourceMap;
+
+    #[test]
+    fn running_out_of_node_ids_is_reported_and_stops() {
+        let text = "const X = 1 + 2";
+        let mut map = SourceMap::new();
+        let file = map.add("ids.pgr", text).unwrap();
+        let mut diagnostics = Diagnostics::new();
+        let tokens = pinguer_lexer::tokenize(file, text, &mut diagnostics);
+        let tree = parse_with_id_capacity(file, text, tokens, &mut diagnostics, 3);
+        let codes: Vec<_> = diagnostics.iter().map(|d| d.code).collect();
+        assert_eq!(codes, [Some(codes::TOO_MANY_NODES)]);
+        assert!(tree.items.is_empty());
+        assert_eq!(tree.node_count, 0);
+    }
 }

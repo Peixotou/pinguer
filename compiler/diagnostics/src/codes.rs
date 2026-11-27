@@ -154,6 +154,8 @@ define_codes! {
     MISPLACED_DECLARATION = 2018, "declaration not allowed here";
     /// Constructs nested deeper than the parser's limit.
     NESTING_TOO_DEEP = 2019, "nesting exceeds the parser's limit";
+    /// A file with more syntax tree nodes than node IDs exist.
+    TOO_MANY_NODES = 2020, "file has more syntax tree nodes than can be numbered";
 }
 
 #[cfg(test)]

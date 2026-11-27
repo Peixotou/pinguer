@@ -12,25 +12,51 @@ use pinguer_ast as ast;
 /// The ID of a node that has not been numbered yet.
 pub(crate) const PENDING: ast::NodeId = ast::NodeId::new(u32::MAX);
 
-/// Numbers every node of `file` in pre-order and records the count.
-pub(crate) fn number(file: &mut ast::File) {
-    let mut numbering = Numbering { next: 0 };
+/// The number of IDs that can be assigned: every `u32` except [`PENDING`].
+pub(crate) const CAPACITY: u32 = u32::MAX;
+
+/// The file has more nodes than [`number`] may assign IDs to.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct TooManyNodes;
+
+/// Numbers every node of `file` in pre-order and records the count, using
+/// IDs below `capacity`.
+///
+/// A file of at most [`pinguer_source::MAX_FILE_SIZE`] bytes can have about
+/// as many nodes as there are IDs, so the count is checked (ADR-0030): when
+/// the IDs run out, the remaining nodes keep [`PENDING`] and the caller
+/// reports the error, instead of IDs being reused or wrapped.
+pub(crate) fn number(file: &mut ast::File, capacity: u32) -> Result<(), TooManyNodes> {
+    let mut numbering = Numbering {
+        next: 0,
+        capacity,
+        exhausted: false,
+    };
     for item in &mut file.items {
         numbering.item(item);
     }
     file.node_count = numbering.next;
+    if numbering.exhausted {
+        Err(TooManyNodes)
+    } else {
+        Ok(())
+    }
 }
 
 struct Numbering {
     next: u32,
+    capacity: u32,
+    exhausted: bool,
 }
 
 impl Numbering {
     fn id(&mut self) -> ast::NodeId {
+        if self.next == self.capacity {
+            self.exhausted = true;
+            return PENDING;
+        }
         let id = ast::NodeId::new(self.next);
-        // A file of at most `u32::MAX` bytes cannot reach this count;
-        // ADR-0030 requires the check that replaces this saturation.
-        self.next = self.next.saturating_add(1);
+        self.next += 1;
         id
     }
 
@@ -123,5 +149,38 @@ impl Numbering {
             }
             ast::ExprKind::Member { base, .. } => self.expr(base),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pinguer_diagnostics::Diagnostics;
+    use pinguer_source::SourceMap;
+
+    fn tree(text: &str) -> ast::File {
+        let mut map = SourceMap::new();
+        let file = map.add("ids.pgr", text).unwrap();
+        let mut diagnostics = Diagnostics::new();
+        let tokens = pinguer_lexer::tokenize(file, text, &mut diagnostics);
+        crate::parse(file, text, tokens, &mut diagnostics)
+    }
+
+    #[test]
+    fn numbering_stops_when_the_ids_run_out() {
+        // `Const`, `Binary`, two `Int` literals.
+        let mut file = tree("const X = 1 + 2");
+        assert_eq!(file.node_count, 4);
+        assert_eq!(number(&mut file, 4), Ok(()));
+        assert_eq!(number(&mut file, 3), Err(TooManyNodes));
+        assert_eq!(file.node_count, 3);
+        let ast::ItemKind::Const(binding) = &file.items[0].kind else {
+            unreachable!()
+        };
+        let ast::ExprKind::Binary { rest, .. } = &binding.value.kind else {
+            unreachable!()
+        };
+        // The last node in pre-order has no ID; none is reused.
+        assert_eq!(rest[0].operand.id, PENDING);
     }
 }

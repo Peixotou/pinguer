@@ -47,7 +47,7 @@ process has 1 MiB of stack; secondary threads elsewhere often have less.
   well ([ADR-0028](0028-ast-representation.md)). They have no limit beyond
   the file size.
 * **Node IDs.** IDs are `u32`. Allocation is checked; if a file ever needed
-  more IDs than exist, the parser reports a resource-limit error and stops
+  more IDs than exist, the parser reports a resource-limit error (`P2020`) and stops
   instead of reusing or wrapping IDs.
 * **Diagnostics.** The parser reports into the caller's `Diagnostics`
   collection, so the CLI's limit of 100 reported diagnostics applies to
