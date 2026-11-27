@@ -219,12 +219,14 @@ impl<W: Write> Renderer<'_, W> {
                 self.line(depth, "Unary", id, span, &op.as_str())?;
                 self.expr(depth + 1, operand)
             }
-            ExprKind::Binary {
-                op, left, right, ..
-            } => {
-                self.line(depth, "Binary", id, span, &op.as_str())?;
-                self.expr(depth + 1, left)?;
-                self.expr(depth + 1, right)
+            ExprKind::Binary { first, rest } => {
+                self.line(depth, "Binary", id, span, &"")?;
+                self.expr(depth + 1, first)?;
+                for operand in rest {
+                    self.line(depth + 1, "Op", None, operand.op_span, &operand.op.as_str())?;
+                    self.expr(depth + 1, &operand.operand)?;
+                }
+                Ok(())
             }
             ExprKind::Cast { operand, ty } => {
                 self.line(depth, "Cast", id, span, &"")?;
@@ -392,10 +394,12 @@ mod tests {
                 id: b.id(),
                 span: b.span(30, 39),
                 kind: ExprKind::Binary {
-                    op: BinaryOp::Add,
-                    op_span: b.span(32, 33),
-                    left: Box::new(left),
-                    right: Box::new(right),
+                    first: Box::new(left),
+                    rest: vec![crate::BinaryOperand {
+                        op: BinaryOp::Add,
+                        op_span: b.span(32, 33),
+                        operand: right,
+                    }],
                 },
             };
             let let_stmt = Stmt {
@@ -525,8 +529,9 @@ File @1:1-1:81 nodes=29
     Type #8 @1:19-1:21 ()
     Block #9 @1:22-1:81
       Let #10 @1:23-1:40 y
-        Binary #13 @1:31-1:40 +
+        Binary #13 @1:31-1:40
           Name #11 @1:31-1:32 x
+          Op @1:33-1:34 +
           Float #12 @1:35-1:40 1.5e3
       Assign #14 @1:41-1:54 z +=
         Cast #17 @1:46-1:54

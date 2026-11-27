@@ -32,16 +32,15 @@ pub enum ExprKind {
         /// The operand.
         operand: Box<Expr>,
     },
-    /// A binary operator applied to two operands, such as `a + b`.
+    /// Binary operators of one precedence level applied from left to
+    /// right: `a - b + c` is one node meaning `(a - b) + c`. Keeping a chain
+    /// in one node bounds the depth of the tree (ADR-0028, ADR-0030).
     Binary {
-        /// The operator.
-        op: BinaryOp,
-        /// Where the operator was written.
-        op_span: Span,
-        /// The left operand.
-        left: Box<Expr>,
-        /// The right operand.
-        right: Box<Expr>,
+        /// The leftmost operand.
+        first: Box<Expr>,
+        /// The operators and the operands to their right, in order. Never
+        /// empty; all operators have the same precedence.
+        rest: Vec<BinaryOperand>,
     },
     /// An explicit conversion, `operand as ty`.
     Cast {
@@ -68,6 +67,17 @@ pub enum ExprKind {
     /// An expression that could not be parsed. A diagnostic has been
     /// reported, by the lexer or the parser.
     Error,
+}
+
+/// An operator of a binary chain and the operand to its right.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BinaryOperand {
+    /// The operator.
+    pub op: BinaryOp,
+    /// Where the operator was written.
+    pub op_span: Span,
+    /// The operand to the right of the operator.
+    pub operand: Expr,
 }
 
 /// A prefix operator.

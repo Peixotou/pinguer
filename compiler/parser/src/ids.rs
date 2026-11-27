@@ -105,9 +105,11 @@ impl Numbering {
             ast::ExprKind::Literal(_) | ast::ExprKind::Name(_) | ast::ExprKind::Error => {}
             ast::ExprKind::Paren(inner) => self.expr(inner),
             ast::ExprKind::Unary { operand, .. } => self.expr(operand),
-            ast::ExprKind::Binary { left, right, .. } => {
-                self.expr(left);
-                self.expr(right);
+            ast::ExprKind::Binary { first, rest } => {
+                self.expr(first);
+                for operand in rest {
+                    self.expr(&mut operand.operand);
+                }
             }
             ast::ExprKind::Cast { operand, ty } => {
                 self.expr(operand);
