@@ -29,6 +29,8 @@ fn nested(kind: &str, levels: usize) -> String {
         "parentheses" => format!("const X = {}1{}", "(".repeat(levels), ")".repeat(levels)),
         "prefix operators" => format!("const X = {}1", "- ".repeat(levels)),
         "calls" => format!("const X = f{}", "()".repeat(levels)),
+        // Arguments are parsed by recursion, unlike a chain of calls.
+        "nested calls" => format!("const X = {}1{}", "f(".repeat(levels), ")".repeat(levels)),
         "member accesses" => format!("const X = a{}", ".b".repeat(levels)),
         "conversions" => format!("const X = x{}", " as int".repeat(levels)),
         // The function body is the first block.
@@ -62,10 +64,11 @@ fn nested(kind: &str, levels: usize) -> String {
     }
 }
 
-const KINDS: [&str; 9] = [
+const KINDS: [&str; 10] = [
     "parentheses",
     "prefix operators",
     "calls",
+    "nested calls",
     "member accesses",
     "conversions",
     "blocks",
@@ -88,7 +91,7 @@ fn every_construct_is_rejected_past_the_limit() {
     let limit = MAX_NESTING as usize;
     for (kind, labelled) in KINDS
         .into_iter()
-        .zip(["(", "-", "(", ".", "as", "{", "{", "{", "+"])
+        .zip(["(", "-", "(", "(", ".", "as", "{", "{", "{", "+"])
     {
         let (codes, labels) = diagnose(&nested(kind, limit + 1));
         assert_eq!(codes, ["P2019"], "{kind}");

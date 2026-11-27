@@ -68,10 +68,13 @@ returns, still enlarges every recursive frame. The recursive functions
 therefore leave diagnostics, node construction and non-recursive cases to
 helpers. Measured on the same thread by the smallest stack that parses,
 renders and drops each construct, the stack used per level of nesting fell
-from 7.0 KiB to 1.6 KiB for parentheses, from 3.2 KiB to 1.6 KiB for blocks
-and from 4.5 KiB to 2.9 KiB for `if` statements; calls and prefix operators
-use about 1 KiB. The deepest case, 256 nested `if` statements, needs about
-770 KiB of the 1 MiB, and the stack guarantee test fails if a change
+from 7.0 KiB to under 2 KiB for parentheses, from 3.2 KiB to 1.6 KiB for
+blocks and from 4.5 KiB to 2.9 KiB for `if` statements. Nested `while`
+statements and nested call arguments (`f(f(…))`) use about 2.6 KiB per
+level, chains of calls (`f()()`) and prefix operators about 1 KiB. The
+deepest cases, 256 nested `if` statements and 256 nested call arguments,
+need about 770 KiB and 710 KiB of the 1 MiB. The stack guarantee test
+covers every kind of construct, these included, and fails if a change
 removes that margin.
 
 ## Alternatives considered

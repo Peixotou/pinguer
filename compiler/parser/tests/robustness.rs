@@ -31,12 +31,23 @@ impl Rng {
     }
 }
 
+/// A position as rendered: line and column, both 1-based.
+type Position = (u32, u32);
+
 /// What parsing one input produced.
 struct Outcome {
     rendered: String,
     codes: Vec<String>,
     node_count: u32,
-    tokens: usize,
+    /// The start of the primary label of every diagnostic, lexical ones
+    /// included.
+    diagnostic_starts: Vec<Position>,
+    /// The primary span of every parser diagnostic, as a byte range, and
+    /// whether it reports an unclosed delimiter.
+    parser_spans: Vec<((u32, u32), bool)>,
+    /// The start of every token other than a line break, in order; the last
+    /// one is the end of the file.
+    token_starts: Vec<Position>,
 }
 
 fn parse(text: &str) -> Outcome {
@@ -44,10 +55,20 @@ fn parse(text: &str) -> Outcome {
     let file = map.add("fuzz.pgr", text).unwrap();
     let mut diagnostics = Diagnostics::new();
     let tokens = pinguer_lexer::tokenize(file, text, &mut diagnostics);
-    let token_count = tokens.len();
+    let source = map.file(file);
+    let position = |offset: u32| {
+        let at = source.line_col(offset);
+        (at.line, at.column)
+    };
+    let token_starts = tokens
+        .iter()
+        .filter(|token| token.kind != pinguer_lexer::TokenKind::Newline)
+        .map(|token| position(token.span.start))
+        .collect();
     let tree = pinguer_parser::parse(file, text, tokens, &mut diagnostics);
     // Rendering panics if a span lies outside the file.
-    let rendered = pinguer_ast::render_to_string(&tree, map.file(file));
+    let rendered = pinguer_ast::render_to_string(&tree, source);
+    let primary = |d: &pinguer_diagnostics::Diagnostic| d.main_label().map(|label| label.span);
     Outcome {
         rendered,
         codes: diagnostics
@@ -55,8 +76,41 @@ fn parse(text: &str) -> Outcome {
             .map(|d| d.code.map_or_else(String::new, |code| code.to_string()))
             .collect(),
         node_count: tree.node_count,
-        tokens: token_count,
+        diagnostic_starts: diagnostics
+            .iter()
+            .filter_map(|d| primary(d).map(|span| position(span.start)))
+            .collect(),
+        parser_spans: diagnostics
+            .iter()
+            .filter(|d| d.code.is_some_and(|code| code.number() / 1000 == 2))
+            .filter_map(|d| {
+                let span = primary(d)?;
+                let unclosed = d.code == Some(pinguer_diagnostics::codes::UNCLOSED_DELIMITER);
+                Some(((span.start, span.end), unclosed))
+            })
+            .collect(),
+        token_starts,
     }
+}
+
+/// Returns the span of every error node in `rendered`, whose lines read
+/// `ErrorStmt #3 @2:5-2:16`.
+fn error_nodes(rendered: &str) -> Vec<(Position, Position)> {
+    let number = |text: &str| text.parse::<u32>().unwrap();
+    rendered
+        .lines()
+        .filter(|line| line.trim_start().starts_with("Error"))
+        .map(|line| {
+            let span = line.split_whitespace().nth(2).unwrap();
+            let (start, end) = span.strip_prefix('@').unwrap().split_once('-').unwrap();
+            let (start_line, start_column) = start.split_once(':').unwrap();
+            let (end_line, end_column) = end.split_once(':').unwrap();
+            (
+                (number(start_line), number(start_column)),
+                (number(end_line), number(end_column)),
+            )
+        })
+        .collect()
 }
 
 /// Checks the invariants that hold for any input, and returns the outcome.
@@ -73,23 +127,38 @@ fn check(text: &str, context: &dyn Fn() -> String) -> Outcome {
     let expected: Vec<u32> = (0..outcome.node_count).collect();
     assert_eq!(ids, expected, "{}", context());
 
-    // Every error node corresponds to a reported diagnostic.
-    if outcome.rendered.contains("Error") {
-        assert!(!outcome.codes.is_empty(), "{}", context());
+    // Every error node has a diagnostic of its own: one that points into
+    // the node or at the token that follows it, where recovery found the
+    // problem.
+    for (start, end) in error_nodes(&outcome.rendered) {
+        let next = outcome
+            .token_starts
+            .iter()
+            .copied()
+            .find(|&token| token >= end)
+            .expect("the end-of-file token follows every node");
+        assert!(
+            outcome
+                .diagnostic_starts
+                .iter()
+                .any(|&at| start <= at && at <= next),
+            "error node {start:?}-{end:?} without a diagnostic: {}\n{}",
+            context(),
+            outcome.rendered
+        );
     }
 
-    // Recovery reports at most one diagnostic per token (ADR-0029).
-    let parser_diagnostics = outcome
-        .codes
-        .iter()
-        .filter(|code| code.starts_with("P2"))
-        .count();
-    assert!(
-        parser_diagnostics <= outcome.tokens,
-        "{parser_diagnostics} diagnostics for {} tokens: {}",
-        outcome.tokens,
-        context()
-    );
+    // No two parser diagnostics blame the same span, except unclosed
+    // delimiters, each of which names a different opening one (ADR-0029).
+    let mut seen = std::collections::HashSet::new();
+    for &(span, unclosed) in &outcome.parser_spans {
+        assert!(
+            seen.insert(span) || unclosed,
+            "two diagnostics at {span:?}: {:?}: {}",
+            outcome.codes,
+            context()
+        );
+    }
 
     // Parsing is deterministic.
     let again = parse(text);
