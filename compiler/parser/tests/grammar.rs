@@ -133,3 +133,46 @@ mod import_decl {
         assert_eq!(parse("import std..io").codes, ["P2003"]);
     }
 }
+
+mod const_decl {
+    use super::*;
+
+    #[test]
+    fn declares_a_constant() {
+        let expected = concat!("  Const #0 @1:1-1:16 LIMIT\n", "    Name #1 @1:15-1:16 x\n",);
+        assert_eq!(tree("const LIMIT = x"), expected);
+        // A line break after `=` continues the declaration.
+        assert_eq!(tree("const LIMIT =\n    x").lines().count(), 2);
+    }
+
+    #[test]
+    fn needs_an_initializer() {
+        for text in ["const LIMIT", "const LIMIT\nimport a", "const LIMIT;"] {
+            let parsed = parse(text);
+            assert_eq!(parsed.codes, ["P2006"], "{text:?}");
+            assert_eq!(
+                parsed.messages,
+                ["`const` declaration has no initializer"],
+                "{text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn needs_a_name_an_equals_sign_and_an_expression() {
+        for (text, code, message) in [
+            ("const = x", "P2002", "expected identifier, found `=`"),
+            ("const X y", "P2005", "expected `=`, found identifier `y`"),
+            ("const X = ;", "P2004", "expected expression, found `;`"),
+            (
+                "const X =",
+                "P2004",
+                "expected expression, found end of file",
+            ),
+        ] {
+            let parsed = parse(text);
+            assert_eq!(parsed.codes, [code], "{text:?}");
+            assert_eq!(parsed.messages, [message], "{text:?}");
+        }
+    }
+}

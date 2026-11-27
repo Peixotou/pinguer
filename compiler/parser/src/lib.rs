@@ -8,6 +8,7 @@
 //! and ADR-0030 (resource limits).
 
 mod cursor;
+mod expr;
 mod item;
 mod newline;
 
@@ -101,6 +102,19 @@ impl Parser<'_> {
                 .with_primary(found.span, "expected an identifier"),
             ))
         }
+    }
+
+    /// Consumes a token of the given kind, or reports that it is missing.
+    fn expect(&mut self, kind: TokenKind) -> PResult<Token> {
+        if self.cursor.at(kind) {
+            return Ok(self.cursor.bump());
+        }
+        let found = self.cursor.current();
+        Err(self.error(
+            Diagnostic::error(format!("expected {kind}, found {}", self.describe(found)))
+                .with_code(codes::EXPECTED_TOKEN)
+                .with_primary(found.span, format!("expected {kind}")),
+        ))
     }
 
     /// Returns `true` at a `Separator = NEWLINE | ";"`.

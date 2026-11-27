@@ -119,6 +119,12 @@ define_codes! {
     EXPECTED_IDENTIFIER = 2002, "expected identifier";
     /// Two items or statements on one line without `;` between them.
     MISSING_SEPARATOR = 2003, "expected a line break or `;`";
+    /// A token that cannot start an expression where one is required.
+    EXPECTED_EXPRESSION = 2004, "expected expression";
+    /// A specific token, such as `=` or `)`, is missing.
+    EXPECTED_TOKEN = 2005, "expected a different token";
+    /// A `let`, `var` or `const` declaration without `=` and a value.
+    MISSING_INITIALIZER = 2006, "declaration without an initializer";
 }
 
 #[cfg(test)]

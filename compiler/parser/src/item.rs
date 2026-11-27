@@ -41,6 +41,9 @@ impl Parser<'_> {
         let start = self.start();
         let kind = match self.cursor.kind() {
             TokenKind::Keyword(Keyword::Import) => self.import(),
+            TokenKind::Keyword(Keyword::Const) => self
+                .binding(ast::BindingKind::Const)
+                .map(ast::ItemKind::Const),
             _ => Err(self.expected_item()),
         };
         ast::Item {
@@ -72,5 +75,32 @@ impl Parser<'_> {
             path.push(self.ident()?);
         }
         Ok(ast::ItemKind::Import(ast::Import { path }))
+    }
+
+    /// `ConstDecl = "const" , IDENT , "=" , Expr`
+    pub(crate) fn binding(&mut self, kind: ast::BindingKind) -> PResult<ast::Binding> {
+        let keyword = self.cursor.bump();
+        let name = self.ident()?;
+        if self.at_separator() || self.cursor.at(TokenKind::Eof) {
+            let found = self.cursor.current();
+            return Err(self.error(
+                Diagnostic::error(format!(
+                    "`{}` declaration has no initializer",
+                    kind.as_str()
+                ))
+                .with_code(codes::MISSING_INITIALIZER)
+                .with_primary(found.span, "expected `=` and a value")
+                .with_secondary(keyword.span.to(name.span), "declared here")
+                .with_note("every `let`, `var` and `const` declaration has an initializer"),
+            ));
+        }
+        self.expect(TokenKind::Eq)?;
+        let value = self.expr()?;
+        Ok(ast::Binding {
+            kind,
+            name,
+            ty: None,
+            value,
+        })
     }
 }
