@@ -37,6 +37,14 @@ pub enum ExprKind {
     /// Binary operators of one precedence level applied from left to
     /// right: `a - b + c` is one node meaning `(a - b) + c`. Keeping a chain
     /// in one node bounds the depth of the tree (ADR-0028, ADR-0030).
+    ///
+    /// The chain means exactly that left fold. Operands are evaluated in
+    /// order, and `&&` and `||` evaluate the operand to their right only
+    /// when the result so far requires it. A chain must never be
+    /// reassociated or reordered: with checked overflow, `-`, `/`, `%`,
+    /// shifts and floating-point arithmetic, `(a op b) op c` and
+    /// `a op (b op c)` differ. Parentheses stay `Paren` operands, never
+    /// merged into the chain.
     Binary {
         /// The leftmost operand.
         first: Box<Expr>,

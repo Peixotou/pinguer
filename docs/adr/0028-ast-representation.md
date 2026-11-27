@@ -77,6 +77,15 @@ server will reuse it ([COMPILER_ARCHITECTURE.md §3.6](../architecture/COMPILER_
   does not grow with the length of a chain ([ADR-0030](0030-parser-resource-limits.md)).
   Each pair records the span of its operator, which type errors point
   at.
+* A chain means that left fold and nothing else: operands are evaluated in
+  order, `&&` and `||` short-circuit from the left, and no later phase may
+  reassociate or reorder a chain, since checked overflow, `-`, `/`, `%`,
+  shifts and floating-point arithmetic depend on the grouping. The
+  intermediate results of a chain have no node ID. Every v0.1 binary
+  operator takes two operands of the same type, so an intermediate result
+  has the type of the operands; a side table that needs one per operator,
+  for example for the location of a trap, keys it by the chain's ID and
+  the operator's index, and reports at the operator's span.
 
 ### Literals
 

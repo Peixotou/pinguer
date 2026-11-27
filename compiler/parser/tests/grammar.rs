@@ -1963,3 +1963,29 @@ mod generic_syntax {
         );
     }
 }
+
+/// The contract of operator chains (ADR-0028): the written order, grouped
+/// from the left, and nothing reassociated.
+mod chain_semantics {
+    use super::*;
+
+    #[test]
+    fn chains_keep_the_written_order_of_operands_and_operators() {
+        for text in [
+            "a - b + c - d",
+            "a / b * c % d",
+            "a << b >> c << d",
+            "a && b && c",
+            "a || b || c",
+        ] {
+            assert_eq!(shape(text), format!("({text})"), "{text}");
+        }
+    }
+
+    #[test]
+    fn parentheses_are_not_merged_into_a_chain() {
+        assert_eq!(shape("a - (b - c)"), "(a - (paren (b - c)))");
+        assert_eq!(shape("(a - b) - c"), "((paren (a - b)) - c)");
+        assert_eq!(shape("a / (b * c)"), "(a / (paren (b * c)))");
+    }
+}
