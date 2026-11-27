@@ -3,8 +3,8 @@
 Status: sections 1–4 are **Normative (v0.1)** for observable behaviour;
 implementation choices are recorded in ADRs and may change without changing
 the language. Sections 5–6 are **Proposals**.
-Implementation: source loading, spans, diagnostics and lexing exist; the
-remaining stages are not started.
+Implementation: source loading, spans, diagnostics, lexing and parsing exist;
+the remaining stages are not started.
 
 ## 1. Overview
 
@@ -32,7 +32,7 @@ text + FileId
   │  pinguer_lexer        tokens, lexical diagnostics          [implemented]
   ▼
 tokens
-  │  parser               syntax tree, syntax diagnostics      [not started]
+  │  pinguer_parser       syntax tree, syntax diagnostics      [implemented]
   ▼
 AST
   │  semantic analysis    name resolution, type checking,      [not started]

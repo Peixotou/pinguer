@@ -1,7 +1,10 @@
 //! Conformance tests for `specifications/GRAMMAR.ebnf`.
 //!
-//! There is one module per production of the grammar, named after it, with
+//! There is one module per production of the grammar, named after it, or
+//! per group of closely related productions (such as `bitwise_expr`), with
 //! positive tests (the rendered tree) and negative tests (the diagnostics).
+//! Modules for recovery and for diagnostics that no single production owns
+//! follow them.
 //! The module list is the traceability matrix between the grammar and the
 //! tests.
 

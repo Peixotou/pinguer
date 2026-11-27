@@ -3,8 +3,10 @@
 Status: the operators marked **Normative (v0.1)** are binding for v0.1. The
 others are **Planned**: approved and specified here, but not part of v0.1
 (see [FEATURE_MATRIX.md](FEATURE_MATRIX.md)).
-Implementation: all operator tokens are recognised by the lexer. Parsing and
-semantics are not started.
+Implementation: all operator tokens are recognised by the lexer, and the v0.1
+operators are parsed with the precedence and associativity of section 1; the
+planned ones are reported as not supported (`P2010`). Semantics are not
+started.
 
 This document is the single source of truth for operator precedence,
 associativity and semantics. Other documents refer to it.

@@ -77,7 +77,11 @@ the negative-literal rule.
 
 * Each node category has an `Error` kind, used where recovery replaced
   invalid input. Every error node has been reported, by the lexer or the
-  parser; later phases skip error nodes without further diagnostics.
+  parser; later phases skip error nodes without further diagnostics. The
+  v0.1 parser produces error items, statements and expressions; a type
+  that cannot be parsed makes the enclosing declaration or statement an
+  error instead, so `TypeKind::Error` exists for later producers of trees,
+  such as an editor that keeps partial declarations.
 * A literal that the lexer reported as malformed (an invalid escape, digit or
   suffix) becomes an error expression, without a second diagnostic.
 

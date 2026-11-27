@@ -2,11 +2,8 @@
 //!
 //! The parser (`pinguer_parser`) produces the tree; later phases read it and
 //! record what they learn in side tables keyed by [`NodeId`], without
-//! modifying it ([ADR-0004], [ADR-0028]). The tree contains syntax only: no
-//! types, no resolved names and no comments.
-//!
-//! [ADR-0004]: https://github.com/Peixotou/pinguer/blob/main/docs/adr/0004-intermediate-representations.md
-//! [ADR-0028]: https://github.com/Peixotou/pinguer/blob/main/docs/adr/0028-ast-representation.md
+//! modifying it (ADR-0004, ADR-0028 in `docs/adr/`). The tree contains
+//! syntax only: no types, no resolved names and no comments.
 
 mod expr;
 mod item;
