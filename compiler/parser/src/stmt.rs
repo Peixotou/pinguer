@@ -67,6 +67,9 @@ impl Parser<'_> {
     /// syntax; semantic analysis rejects it.
     fn expr_stmt(&mut self) -> PResult<ast::StmtKind> {
         let expr = self.expr()?;
+        if let Some(op) = assign_op(self.cursor.kind()) {
+            return self.assignment(expr, op);
+        }
         if matches!(
             expr.kind,
             ast::ExprKind::Unary { .. } | ast::ExprKind::Binary { .. } | ast::ExprKind::Cast { .. }
@@ -80,4 +83,51 @@ impl Parser<'_> {
         }
         Ok(ast::StmtKind::Expr(expr))
     }
+
+    /// `Assignment = IDENT , AssignOp , Expr`, after the target has been
+    /// parsed as an expression. Only a name is a valid target in v0.1.
+    fn assignment(&mut self, target: ast::Expr, op: ast::AssignOp) -> PResult<ast::StmtKind> {
+        let ast::ExprKind::Name(target) = target.kind else {
+            return Err(self.error(
+                Diagnostic::error("invalid assignment target")
+                    .with_code(codes::INVALID_ASSIGNMENT_TARGET)
+                    .with_primary(target.span, "cannot be assigned")
+                    .with_note("only variables can be assigned in Pinguer v0.1"),
+            ));
+        };
+        let op_span = self.cursor.bump().span;
+        let value = self.expr()?;
+        Ok(ast::StmtKind::Assign {
+            target,
+            op,
+            op_span,
+            value,
+        })
+    }
+}
+
+/// `AssignOp = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^="
+/// | "<<=" | ">>="`
+fn assign_op(kind: TokenKind) -> Option<ast::AssignOp> {
+    use ast::AssignOp as A;
+    Some(match kind {
+        TokenKind::Eq => A::Assign,
+        TokenKind::PlusEq => A::Add,
+        TokenKind::MinusEq => A::Sub,
+        TokenKind::StarEq => A::Mul,
+        TokenKind::SlashEq => A::Div,
+        TokenKind::PercentEq => A::Rem,
+        TokenKind::AmpEq => A::BitAnd,
+        TokenKind::PipeEq => A::BitOr,
+        TokenKind::CaretEq => A::BitXor,
+        TokenKind::ShlEq => A::Shl,
+        TokenKind::ShrEq => A::Shr,
+        _ => return None,
+    })
+}
+
+/// Returns `true` for the tokens that are assignment operators, which can
+/// only follow the target of an assignment statement.
+pub(crate) fn is_assign_op(kind: TokenKind) -> bool {
+    assign_op(kind).is_some()
 }

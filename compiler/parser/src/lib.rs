@@ -149,15 +149,19 @@ impl Parser<'_> {
     /// separator, the end of its block or the end of the file.
     fn missing_separator(&mut self, what: &str) -> Reported {
         let found = self.cursor.current();
-        self.error(
-            Diagnostic::error(format!(
-                "expected a line break or `;` after the {what}, found {}",
-                self.describe(found)
-            ))
-            .with_code(codes::MISSING_SEPARATOR)
-            .with_primary(found.span, "expected a line break or `;` before this")
-            .with_note("each item and statement ends at a line break or `;`"),
-        )
+        let mut diagnostic = Diagnostic::error(format!(
+            "expected a line break or `;` after the {what}, found {}",
+            self.describe(found)
+        ))
+        .with_code(codes::MISSING_SEPARATOR)
+        .with_primary(found.span, "expected a line break or `;` before this")
+        .with_note("each item and statement ends at a line break or `;`");
+        if stmt::is_assign_op(found.kind) {
+            diagnostic = diagnostic.with_note(
+                "assignment is a statement, not an expression, so assignments cannot be chained",
+            );
+        }
+        self.error(diagnostic)
     }
 
     fn error(&mut self, diagnostic: Diagnostic) -> Reported {

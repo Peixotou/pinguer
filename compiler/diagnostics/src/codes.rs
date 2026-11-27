@@ -139,6 +139,8 @@ define_codes! {
     MISSING_PARAMETER_TYPE = 2011, "parameter without a type";
     /// A prefix, binary or `as` expression used as a statement.
     EXPRESSION_STATEMENT = 2012, "expression cannot be used as a statement";
+    /// An assignment whose target is not a variable name.
+    INVALID_ASSIGNMENT_TARGET = 2013, "invalid assignment target";
 }
 
 #[cfg(test)]

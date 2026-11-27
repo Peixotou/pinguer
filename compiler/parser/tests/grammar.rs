@@ -1023,3 +1023,55 @@ mod local_bindings {
         }
     }
 }
+
+/// `Assignment = IDENT , AssignOp , Expr`
+mod assignment {
+    use super::*;
+
+    #[test]
+    fn every_assignment_operator() {
+        for op in [
+            "=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=",
+        ] {
+            let body = tree(&format!("func f() {{ x {op} 1 }}"));
+            assert!(
+                body.contains(&format!(
+                    "      Assign #2 @1:12-1:{} x {op}\n",
+                    16 + op.len()
+                )),
+                "{op}: {body}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_value_is_a_full_expression_and_may_continue_on_the_next_line() {
+        let body = tree("func f() {\n    total +=\n        a * b\n}");
+        assert!(
+            body.contains("      Assign #2 @2:5-3:14 total +=\n"),
+            "{body}"
+        );
+        assert!(body.contains("        Binary #3 @3:9-3:14\n"), "{body}");
+    }
+
+    #[test]
+    fn only_variables_can_be_assigned() {
+        for target in ["a.b", "f()", "(x)", "-x", "a + b", "1"] {
+            let parsed = parse(&format!("func f() {{ {target} = 1 }}"));
+            assert_eq!(parsed.codes, ["P2013"], "{target}");
+            assert_eq!(parsed.labelled, [target], "{target}");
+        }
+    }
+
+    #[test]
+    fn assignments_are_statements_not_expressions() {
+        let parsed = parse("func f() { x = y = 1 }");
+        assert_eq!(parsed.codes, ["P2003"]);
+        assert_eq!(
+            parsed.notes[0][1],
+            "assignment is a statement, not an expression, so assignments cannot be chained"
+        );
+        assert_eq!(parse("func f() { x = }").codes, ["P2004"]);
+        assert_eq!(parse("func f() { x **= 2 }").codes, ["P2010"]);
+    }
+}

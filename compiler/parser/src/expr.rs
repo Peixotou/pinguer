@@ -305,6 +305,7 @@ fn binary_op(kind: TokenKind) -> Option<(ast::BinaryOp, u8)> {
 pub(crate) fn planned_syntax(kind: TokenKind) -> Option<&'static str> {
     Some(match kind {
         TokenKind::StarStar => "the power operator `**`",
+        TokenKind::StarStarEq => "the compound assignment `**=`",
         TokenKind::PipeGt => "the pipeline operator `|>`",
         TokenKind::QuestionQuestion => "the coalescing operator `??`",
         TokenKind::QuestionDot => "optional member access `?.`",
