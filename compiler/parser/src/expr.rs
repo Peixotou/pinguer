@@ -2,7 +2,7 @@
 
 use pinguer_ast as ast;
 use pinguer_diagnostics::{Diagnostic, codes};
-use pinguer_lexer::TokenKind;
+use pinguer_lexer::{Keyword, TokenKind};
 
 use crate::{PResult, Parser, literal};
 
@@ -12,7 +12,8 @@ impl Parser<'_> {
         self.primary()
     }
 
-    /// `PrimaryExpr = INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | CHAR_LITERAL | … | IDENT | …`
+    /// `PrimaryExpr = INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | CHAR_LITERAL
+    /// | "true" | "false" | IDENT | …`
     ///
     /// A literal the lexer reported as malformed becomes an error
     /// expression without a second diagnostic.
@@ -49,6 +50,10 @@ impl Parser<'_> {
                     Some(value) => ast::ExprKind::Literal(ast::Literal::Char(value)),
                     None => ast::ExprKind::Error,
                 }
+            }
+            TokenKind::Keyword(keyword @ (Keyword::True | Keyword::False)) => {
+                self.cursor.bump();
+                ast::ExprKind::Literal(ast::Literal::Bool(keyword == Keyword::True))
             }
             TokenKind::Ident => ast::ExprKind::Name(self.ident()?),
             _ => {

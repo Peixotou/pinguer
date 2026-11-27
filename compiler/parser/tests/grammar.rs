@@ -286,6 +286,15 @@ mod primary_expr {
     }
 
     #[test]
+    fn boolean_literals_and_names() {
+        assert_eq!(value("true"), "    Bool #1 @1:11-1:15 true\n");
+        assert_eq!(value("false"), "    Bool #1 @1:11-1:16 false\n");
+        // Only the lowercase keywords are literals.
+        assert_eq!(value("True"), "    Name #1 @1:11-1:15 True\n");
+        assert_eq!(value("_count"), "    Name #1 @1:11-1:17 _count\n");
+    }
+
+    #[test]
     fn malformed_integer_literals_are_reported_once_by_the_lexer() {
         for (text, code) in [
             ("0b12", "P1006"),
