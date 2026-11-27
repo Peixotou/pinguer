@@ -132,6 +132,9 @@ define_codes! {
     /// A comparison operator applied to the result of another, such as
     /// `a < b < c`.
     CHAINED_COMPARISON = 2009, "comparison operators cannot be chained";
+    /// Syntax of a planned feature, such as `**` or `[`, which v0.1 does
+    /// not support.
+    UNSUPPORTED_SYNTAX = 2010, "syntax not supported in this version";
 }
 
 #[cfg(test)]

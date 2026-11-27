@@ -25,7 +25,13 @@ impl Parser<'_> {
     fn binary(&mut self, min: u8) -> PResult<ast::Expr> {
         let start = self.start();
         let mut left = self.cast()?;
-        while let Some((_, level)) = binary_op(self.cursor.kind()) {
+        loop {
+            if planned_syntax(self.cursor.kind()).is_some() {
+                return Err(self.unsupported());
+            }
+            let Some((_, level)) = binary_op(self.cursor.kind()) else {
+                break;
+            };
             if level < min {
                 break;
             }
@@ -56,6 +62,21 @@ impl Parser<'_> {
             };
         }
         Ok(left)
+    }
+
+    /// Reports the current token, which belongs to syntax that later
+    /// versions add (see [`planned_syntax`]).
+    pub(crate) fn unsupported(&mut self) -> Reported {
+        let found = self.cursor.current();
+        let what = planned_syntax(found.kind).unwrap_or("this syntax");
+        self.error(
+            Diagnostic::error(format!("{what} is not supported in Pinguer v0.1"))
+                .with_code(codes::UNSUPPORTED_SYNTAX)
+                .with_primary(found.span, "not supported in v0.1")
+                .with_note(
+                    "it is planned for a later version; see specifications/FEATURE_MATRIX.md",
+                ),
+        )
     }
 
     /// Reports a comparison operator that follows another one: comparisons
@@ -216,6 +237,7 @@ impl Parser<'_> {
                 self.expect_closing(open, TokenKind::RParen)?;
                 ast::ExprKind::Paren(Box::new(inner))
             }
+            kind if planned_syntax(kind).is_some() => return Err(self.unsupported()),
             _ => {
                 let found = self.cursor.current();
                 return Err(self.error(
@@ -274,6 +296,23 @@ fn binary_op(kind: TokenKind) -> Option<(ast::BinaryOp, u8)> {
         TokenKind::GtEq => (B::Ge, COMPARISON),
         TokenKind::AmpAmp => (B::And, AND),
         TokenKind::PipePipe => (B::Or, OR),
+        _ => return None,
+    })
+}
+
+/// Names the planned construct that a token belongs to, for tokens that
+/// the lexer recognises but v0.1 syntax does not use.
+pub(crate) fn planned_syntax(kind: TokenKind) -> Option<&'static str> {
+    Some(match kind {
+        TokenKind::StarStar => "the power operator `**`",
+        TokenKind::PipeGt => "the pipeline operator `|>`",
+        TokenKind::QuestionQuestion => "the coalescing operator `??`",
+        TokenKind::QuestionDot => "optional member access `?.`",
+        TokenKind::Question => "`?`",
+        TokenKind::LBracket => "indexing and array syntax `[`",
+        TokenKind::DotDot | TokenKind::DotDotEq => "range syntax",
+        TokenKind::FatArrow => "`=>`",
+        TokenKind::At => "an attribute",
         _ => return None,
     })
 }

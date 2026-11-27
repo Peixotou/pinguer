@@ -782,3 +782,52 @@ mod member_suffix {
         }
     }
 }
+
+/// Tokens the lexer recognises for planned features (OPERATORS.md,
+/// FEATURE_MATRIX.md) are reported as unsupported, never accepted.
+mod planned_syntax {
+    use super::*;
+
+    #[test]
+    fn planned_operators_after_an_operand() {
+        for (text, what) in [
+            ("a ** b", "the power operator `**`"),
+            ("x |> f", "the pipeline operator `|>`"),
+            ("a ?? b", "the coalescing operator `??`"),
+            ("a?.b", "optional member access `?.`"),
+            ("f()?", "`?`"),
+            ("a[0]", "indexing and array syntax `[`"),
+            ("a..b", "range syntax"),
+            ("a..=b", "range syntax"),
+            ("a => b", "`=>`"),
+        ] {
+            let parsed = parse(&format!("const X = {text}"));
+            assert_eq!(parsed.codes, ["P2010"], "{text}");
+            assert_eq!(
+                parsed.messages,
+                [format!("{what} is not supported in Pinguer v0.1")],
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn planned_syntax_where_an_expression_starts() {
+        for (text, labelled) in [("[1, 2]", "["), ("@inline", "@"), ("..5", "..")] {
+            let parsed = parse(&format!("const X = {text}"));
+            assert_eq!(parsed.codes, ["P2010"], "{text}");
+            assert_eq!(parsed.labelled, [labelled], "{text}");
+        }
+    }
+
+    #[test]
+    fn planned_operators_inside_v0_1_expressions() {
+        let parsed = parse("const X = f(a, 2 ** 3)");
+        assert_eq!(parsed.codes, ["P2010"]);
+        assert_eq!(parsed.labelled, ["**"]);
+        assert_eq!(
+            parsed.notes,
+            [["it is planned for a later version; see specifications/FEATURE_MATRIX.md"]]
+        );
+    }
+}
