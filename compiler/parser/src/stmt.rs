@@ -31,20 +31,20 @@ impl Parser<'_> {
         self.skip_separators();
         while !self.cursor.at(TokenKind::RBrace) && !self.cursor.at(TokenKind::Eof) {
             let stmt = self.stmt();
-            let failed = stmt.kind == ast::StmtKind::Error;
-            stmts.push(stmt);
-            // Until statement-level recovery exists, an error ends the
-            // block, and with it the enclosing item.
-            if failed {
-                return Err(crate::Reported);
+            if stmt.kind == ast::StmtKind::Error {
+                self.skip_statement();
             }
+            stmts.push(stmt);
             // The end of the file is left for `expect_closing`, which
             // reports the unclosed `{`.
             if self.cursor.at(TokenKind::RBrace) || self.cursor.at(TokenKind::Eof) {
                 break;
             }
             if !self.at_separator() {
-                return Err(self.missing_separator("statement"));
+                // Report once and drop the rest of the line, rather than
+                // reporting every token that follows.
+                self.missing_separator("statement");
+                self.skip_statement();
             }
             self.skip_separators();
         }
@@ -54,6 +54,30 @@ impl Parser<'_> {
             span: self.span_from(start),
             stmts,
         })
+    }
+
+    /// Skips the rest of a statement after an error (ADR-0029): up to the
+    /// next separator at the statement's own nesting level, the `}` that
+    /// closes the enclosing block, which is left for the block, or the end
+    /// of the file. Delimiters are counted, so a nested block or argument
+    /// list is skipped as a whole; a closer without an opener is skipped.
+    /// Every token is consumed at most once, so recovery is linear.
+    fn skip_statement(&mut self) {
+        let mut depth = 0usize;
+        loop {
+            match self.cursor.kind() {
+                TokenKind::Eof => return,
+                TokenKind::Newline | TokenKind::Semicolon | TokenKind::RBrace if depth == 0 => {
+                    return;
+                }
+                TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => depth += 1,
+                TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => {
+                    depth = depth.saturating_sub(1);
+                }
+                _ => {}
+            }
+            self.cursor.bump();
+        }
     }
 
     /// `Statement = LetDecl | VarDecl | ConstDecl | Assignment | ExprStatement

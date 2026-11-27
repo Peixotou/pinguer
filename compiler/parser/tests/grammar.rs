@@ -1309,3 +1309,74 @@ mod else_placement {
         }
     }
 }
+
+/// Statement-level recovery (ADR-0029).
+mod statement_recovery {
+    use super::*;
+
+    #[test]
+    fn each_broken_statement_is_reported_once_and_the_rest_parses() {
+        let text = "func f() {\n    let = 1\n    a + b = 1\n    h()\n    -x\n    m()\n}";
+        let parsed = parse(text);
+        assert_eq!(
+            parsed.codes,
+            ["P2002", "P2013", "P2012"],
+            "{:?}",
+            parsed.messages
+        );
+        assert_eq!(
+            parsed.tree.matches("ExprStmt").count(),
+            2,
+            "{}",
+            parsed.tree
+        );
+        assert_eq!(
+            parsed.tree.matches("ErrorStmt").count(),
+            3,
+            "{}",
+            parsed.tree
+        );
+    }
+
+    #[test]
+    fn an_unclosed_parenthesis_extends_the_statement_to_the_closing_brace() {
+        // Inside `(` the lexer produces no line breaks until the enclosing
+        // `}` closes it, so the whole rest of the block is one statement.
+        let parsed = parse("func f() {\n    g(\n    h()\n}\nfunc k() {\n}");
+        assert_eq!(parsed.codes, ["P2008"]);
+        assert!(
+            parsed.tree.contains("Func #") && parsed.tree.contains(" k\n"),
+            "{}",
+            parsed.tree
+        );
+    }
+
+    #[test]
+    fn nested_blocks_inside_a_broken_statement_are_skipped_whole() {
+        let parsed = parse("func f() {\n    if a + { g()\n        h() }\n    k()\n}");
+        assert_eq!(parsed.codes, ["P2004"]);
+        assert!(
+            parsed.tree.contains("Name #") && parsed.tree.contains(" k\n"),
+            "{}",
+            parsed.tree
+        );
+    }
+
+    #[test]
+    fn a_missing_separator_drops_the_rest_of_the_line_only() {
+        let parsed = parse("func f() {\n    a() b() c()\n    d()\n}");
+        assert_eq!(parsed.codes, ["P2003"]);
+        assert_eq!(
+            parsed.tree.matches("ExprStmt").count(),
+            2,
+            "{}",
+            parsed.tree
+        );
+    }
+
+    #[test]
+    fn errors_in_later_functions_are_still_found() {
+        let parsed = parse("func f() {\n    -x\n}\n\nfunc g() {\n    a ** b\n}");
+        assert_eq!(parsed.codes, ["P2012", "P2010"]);
+    }
+}
