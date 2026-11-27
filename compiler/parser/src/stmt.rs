@@ -1,6 +1,7 @@
 //! Blocks and statements.
 
 use pinguer_ast as ast;
+use pinguer_diagnostics::{Diagnostic, codes};
 use pinguer_lexer::TokenKind;
 
 use crate::ids::PENDING;
@@ -51,7 +52,23 @@ impl Parser<'_> {
     }
 
     /// `ExprStatement = PostfixExpr`
+    ///
+    /// The whole expression is parsed so that the diagnostic can cover it.
+    /// A postfix expression that is not a call, such as `x`, is valid
+    /// syntax; semantic analysis rejects it.
     fn expr_stmt(&mut self) -> PResult<ast::StmtKind> {
-        Ok(ast::StmtKind::Expr(self.expr()?))
+        let expr = self.expr()?;
+        if matches!(
+            expr.kind,
+            ast::ExprKind::Unary { .. } | ast::ExprKind::Binary { .. } | ast::ExprKind::Cast { .. }
+        ) {
+            return Err(self.error(
+                Diagnostic::error("expression cannot be used as a statement")
+                    .with_code(codes::EXPRESSION_STATEMENT)
+                    .with_primary(expr.span, "its value would be discarded")
+                    .with_note("only calls can be used as expression statements"),
+            ));
+        }
+        Ok(ast::StmtKind::Expr(expr))
     }
 }

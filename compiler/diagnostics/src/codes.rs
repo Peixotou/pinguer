@@ -137,6 +137,8 @@ define_codes! {
     UNSUPPORTED_SYNTAX = 2010, "syntax not supported in this version";
     /// A function parameter without `: Type`.
     MISSING_PARAMETER_TYPE = 2011, "parameter without a type";
+    /// A prefix, binary or `as` expression used as a statement.
+    EXPRESSION_STATEMENT = 2012, "expression cannot be used as a statement";
 }
 
 #[cfg(test)]

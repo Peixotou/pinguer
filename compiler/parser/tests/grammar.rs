@@ -937,3 +937,35 @@ mod block {
         );
     }
 }
+
+/// `ExprStatement = PostfixExpr`
+mod expr_statement {
+    use super::*;
+
+    #[test]
+    fn postfix_expressions_are_statements() {
+        // Only calls are meaningful, but that is checked by semantic
+        // analysis: syntactically these are all expression statements.
+        for text in ["f()", "io.println(x)", "x", "1", "(f)()", "io.println"] {
+            let body = tree(&format!("func f() {{ {text} }}"));
+            assert!(body.contains("ExprStmt"), "{text}: {body}");
+        }
+    }
+
+    #[test]
+    fn other_expressions_are_not_statements() {
+        for text in ["a + b", "-x", "!f()", "x as int", "a == b"] {
+            let parsed = parse(&format!("func f() {{ {text} }}"));
+            assert_eq!(parsed.codes, ["P2012"], "{text}");
+            assert_eq!(parsed.labelled, [text], "{text}");
+        }
+    }
+
+    #[test]
+    fn a_line_starting_with_minus_does_not_continue_the_previous_one() {
+        // ADR-0005: `-x` on its own line is a separate, invalid statement.
+        let parsed = parse("func f() {\n    g()\n    -x\n}");
+        assert_eq!(parsed.codes, ["P2012"]);
+        assert_eq!(parsed.labelled, ["-x"]);
+    }
+}
