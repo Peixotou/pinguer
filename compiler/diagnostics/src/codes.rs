@@ -112,6 +112,9 @@ define_codes! {
     /// A control character other than tab and line breaks, or U+2028 or
     /// U+2029, written directly in source text.
     FORBIDDEN_CONTROL_CHARACTER = 1012, "control character or Unicode line separator in source";
+
+    /// A token that cannot start a top-level item.
+    EXPECTED_ITEM = 2001, "expected `import`, `func` or `const`";
 }
 
 #[cfg(test)]

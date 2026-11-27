@@ -5,6 +5,7 @@ members = [
     "compiler/diagnostics",
     "compiler/lexer",
     "compiler/ast",
+    "compiler/parser",
     "cli",
 ]
 
@@ -19,6 +20,7 @@ authors = ["The Pinguer Project Developers"]
 pinguer_source = { path = "compiler/source", version = "0.1.0-dev" }
 pinguer_diagnostics = { path = "compiler/diagnostics", version = "0.1.0-dev" }
 pinguer_lexer = { path = "compiler/lexer", version = "0.1.0-dev" }
+pinguer_ast = { path = "compiler/ast", version = "0.1.0-dev" }
 
 [workspace.lints.rust]
 # Unsafe code is forbidden workspace-wide. A crate that genuinely needs it must
