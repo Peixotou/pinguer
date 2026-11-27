@@ -37,6 +37,16 @@ fn nested(kind: &str, levels: usize) -> String {
             "{".repeat(levels - 1),
             "}".repeat(levels - 1)
         ),
+        "conditionals" => format!(
+            "func f() {{{}{}}}",
+            "if x {".repeat(levels - 1),
+            "} else {}".repeat(levels - 1)
+        ),
+        "loops" => format!(
+            "func f() {{{}{}}}",
+            "while x {".repeat(levels - 1),
+            "}".repeat(levels - 1)
+        ),
         // Each `(1 + …)` is a parenthesized expression containing a chain.
         "operator chains" => {
             let pairs = levels / 2;
@@ -52,13 +62,15 @@ fn nested(kind: &str, levels: usize) -> String {
     }
 }
 
-const KINDS: [&str; 7] = [
+const KINDS: [&str; 9] = [
     "parentheses",
     "prefix operators",
     "calls",
     "member accesses",
     "conversions",
     "blocks",
+    "conditionals",
+    "loops",
     "operator chains",
 ];
 
@@ -74,7 +86,10 @@ fn every_construct_is_accepted_at_the_limit() {
 #[test]
 fn every_construct_is_rejected_past_the_limit() {
     let limit = MAX_NESTING as usize;
-    for (kind, labelled) in KINDS.into_iter().zip(["(", "-", "(", ".", "as", "{", "+"]) {
+    for (kind, labelled) in KINDS
+        .into_iter()
+        .zip(["(", "-", "(", ".", "as", "{", "{", "{", "+"])
+    {
         let (codes, labels) = diagnose(&nested(kind, limit + 1));
         assert_eq!(codes, ["P2019"], "{kind}");
         assert_eq!(labels, [labelled], "{kind}");
@@ -118,4 +133,98 @@ fn a_statement_past_the_limit_is_discarded_alone() {
     let text = format!("func f() {{\n    {}\n    g(-)\n}}", blocks(300));
     let (codes, _) = diagnose(&text);
     assert_eq!(codes, ["P2019", "P2004"]);
+}
+
+/// Runs `f` on a thread with 1 MiB of stack, the size of the main thread's
+/// stack on Windows, so that a stack overflow fails the test.
+fn on_small_stack(f: impl FnOnce() + Send + 'static) {
+    std::thread::Builder::new()
+        .stack_size(1 << 20)
+        .spawn(f)
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+/// Lexes, parses and renders `text`, drops the tree and returns the codes
+/// of the diagnostics.
+fn parse_render_drop(text: &str) -> Vec<String> {
+    let mut map = SourceMap::new();
+    let file = map.add("stack.pgr", text).unwrap();
+    let mut diagnostics = Diagnostics::new();
+    let tokens = pinguer_lexer::tokenize(file, text, &mut diagnostics);
+    let tree = pinguer_parser::parse(file, text, tokens, &mut diagnostics);
+    let rendered = pinguer_ast::render_to_string(&tree, map.file(file));
+    assert!(rendered.starts_with("File"));
+    drop(tree);
+    diagnostics
+        .iter()
+        .map(|d| d.code.map_or_else(String::new, |code| code.to_string()))
+        .collect()
+}
+
+/// ADR-0030's stack guarantee. Tests run unoptimized unless `--release` is
+/// given, which only lowers stack use.
+#[test]
+fn nesting_at_the_limit_fits_in_one_mebibyte_of_stack() {
+    on_small_stack(|| {
+        for kind in KINDS {
+            let codes = parse_render_drop(&nested(kind, MAX_NESTING as usize));
+            assert!(codes.is_empty(), "{kind}: {codes:?}");
+        }
+    });
+}
+
+/// Ten thousand levels, as in the lexer's robustness corpus: each is
+/// reported once, on the same small stack.
+#[test]
+fn ten_thousand_levels_are_reported_once() {
+    on_small_stack(|| {
+        for kind in KINDS {
+            let codes = parse_render_drop(&nested(kind, 10_000));
+            assert_eq!(codes, ["P2019"], "{kind}");
+        }
+    });
+}
+
+#[test]
+fn ten_thousand_unclosed_delimiters_terminate() {
+    on_small_stack(|| {
+        for text in [
+            format!("const X = {}", "(".repeat(10_000)),
+            format!("const X = {}", "- (".repeat(10_000)),
+            format!("const X = {}", "f(".repeat(10_000)),
+            format!("const X = {}", "[".repeat(10_000)),
+        ] {
+            let codes = parse_render_drop(&text);
+            assert_eq!(codes.len(), 1, "{codes:?}");
+        }
+        // Every block that reaches the end of the file is unclosed and
+        // reported, up to the limit.
+        let codes = parse_render_drop(&format!("func f() {}", "{".repeat(10_000)));
+        assert_eq!(codes[0], "P2019");
+        assert_eq!(codes.len(), 1 + MAX_NESTING as usize, "{codes:?}");
+        assert!(codes[1..].iter().all(|code| code == "P2008"));
+    });
+}
+
+/// Lists are parsed by loops and have no limit.
+#[test]
+fn long_lists_are_not_limited() {
+    on_small_stack(|| {
+        let n = 100_000;
+        for text in [
+            format!("const X = 1{}", " + 1".repeat(n)),
+            format!("const X = f({})", "1, ".repeat(n)),
+            format!("func f() {{\n{}}}", "g()\n".repeat(n)),
+            format!(
+                "func f() {{\n    if x {{\n    }}{}\n}}",
+                " else if x {\n    }".repeat(n)
+            ),
+            "import a\n".repeat(n),
+        ] {
+            let codes = parse_render_drop(&text);
+            assert!(codes.is_empty(), "{codes:?}");
+        }
+    });
 }

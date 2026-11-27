@@ -60,8 +60,19 @@ Measurements on Windows with an unoptimized build and a 1 MiB thread,
 before this limit existed: a left-deep tree of 2,000 binary operators could
 be numbered and dropped but not rendered, 4,000 could not be dropped, and
 fewer than 500 nested parentheses already exhausted the stack while
-parsing. The limit of 256 keeps every pass within that stack with a
-margin, which the stack guarantee test checks.
+parsing.
+
+An unoptimized build gives every temporary of a function its own stack
+slot, so code that only runs on errors, or after the recursive call
+returns, still enlarges every recursive frame. The recursive functions
+therefore leave diagnostics, node construction and non-recursive cases to
+helpers. Measured on the same thread by the smallest stack that parses,
+renders and drops each construct, the stack used per level of nesting fell
+from 7.0 KiB to 1.6 KiB for parentheses, from 3.2 KiB to 1.6 KiB for blocks
+and from 4.5 KiB to 2.9 KiB for `if` statements; calls and prefix operators
+use about 1 KiB. The deepest case, 256 nested `if` statements, needs about
+770 KiB of the 1 MiB, and the stack guarantee test fails if a change
+removes that margin.
 
 ## Alternatives considered
 
