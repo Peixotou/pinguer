@@ -15,9 +15,11 @@ impl Parser<'_> {
         let mut items = Vec::new();
         self.skip_separators();
         while !self.cursor.at(TokenKind::Eof) {
-            let item = self.item();
+            let mut item = self.item();
             if item.kind == ast::ItemKind::Error {
-                self.skip_item();
+                // The error node covers what recovery skipped.
+                let end = self.skip_item().max(item.span.end);
+                item.span = Span::new(self.file, item.span.start, end);
             } else if !self.cursor.at(TokenKind::Eof) && !self.at_separator() {
                 self.missing_separator("item");
                 self.skip_item();
@@ -37,22 +39,29 @@ impl Parser<'_> {
     /// delimiter opened while skipping, or to the end of the file. A
     /// function body is therefore skipped as a whole, even when it contains
     /// `const` declarations. Every token is consumed at most once.
-    fn skip_item(&mut self) {
+    ///
+    /// Returns the end of the last token skipped other than a line break,
+    /// or the end of the last consumed token if nothing was skipped.
+    fn skip_item(&mut self) -> u32 {
         let mut depth = 0usize;
+        let mut end = self.cursor.prev_end();
         loop {
             let token = self.cursor.current();
             match token.kind {
-                TokenKind::Eof => return,
+                TokenKind::Eof => return end,
                 TokenKind::Keyword(Keyword::Func | Keyword::Import | Keyword::Const)
                     if depth == 0 && self.starts_line(token) =>
                 {
-                    return;
+                    return end;
                 }
                 TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => depth += 1,
                 TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => {
                     depth = depth.saturating_sub(1);
                 }
                 _ => {}
+            }
+            if token.kind != TokenKind::Newline {
+                end = token.span.end;
             }
             self.cursor.bump();
         }

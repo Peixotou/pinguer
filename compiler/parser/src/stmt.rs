@@ -25,9 +25,11 @@ impl Parser<'_> {
         let mut stmts = Vec::new();
         self.skip_separators();
         while !self.cursor.at(TokenKind::RBrace) && !self.cursor.at(TokenKind::Eof) {
-            let stmt = self.stmt();
+            let mut stmt = self.stmt();
             if stmt.kind == ast::StmtKind::Error {
                 self.skip_statement();
+                // The error node covers what recovery skipped.
+                stmt.span = self.span_from(stmt.span.start);
             }
             stmts.push(stmt);
             // The end of the file is left for `expect_closing`, which

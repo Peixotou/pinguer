@@ -1658,3 +1658,24 @@ mod missing_closing_delimiter {
         assert!(parsed.tree.contains("Const #"), "{}", parsed.tree);
     }
 }
+
+mod error_node_spans {
+    use super::*;
+
+    #[test]
+    fn error_nodes_cover_the_skipped_tokens() {
+        let parsed = parse("func f() {\n    let = 1 + 2\n    g()\n}");
+        assert!(
+            parsed.tree.contains("      ErrorStmt #2 @2:5-2:16\n"),
+            "{}",
+            parsed.tree
+        );
+        // Line breaks after the last skipped token are not covered.
+        let parsed = parse("const = (1,\n  2)\n\nfunc g() {\n}");
+        assert!(
+            parsed.tree.starts_with("  ErrorItem #0 @1:1-2:5\n"),
+            "{}",
+            parsed.tree
+        );
+    }
+}
