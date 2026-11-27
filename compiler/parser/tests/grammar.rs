@@ -1627,3 +1627,34 @@ mod misplaced_declaration {
         assert_eq!(parsed.labelled, ["func", ""]);
     }
 }
+
+mod missing_closing_delimiter {
+    use super::*;
+
+    #[test]
+    fn a_construct_before_a_closing_brace_is_kept() {
+        let parsed = parse("func f() {\n    g(a, (b\n}");
+        assert_eq!(parsed.codes, ["P2008", "P2008"]);
+        assert_eq!(parsed.labelled, ["}", "}"]);
+        assert!(parsed.tree.contains("Call #"), "{}", parsed.tree);
+        assert!(!parsed.tree.contains("Error"), "{}", parsed.tree);
+    }
+
+    #[test]
+    fn constructs_at_the_end_of_the_file_are_kept() {
+        let parsed = parse("func f() {\n    if x {\n        g()\n");
+        assert_eq!(parsed.codes, ["P2008", "P2008"]);
+        assert_eq!(parsed.labelled, ["", ""]);
+        assert!(parsed.tree.contains("If #"), "{}", parsed.tree);
+        assert!(!parsed.tree.contains("Error"), "{}", parsed.tree);
+    }
+
+    #[test]
+    fn other_tokens_make_the_construct_an_error() {
+        let parsed = parse("const X = (1 2)\nconst Y = 3");
+        assert_eq!(parsed.codes, ["P2008"]);
+        assert_eq!(parsed.labelled, ["2"]);
+        assert!(parsed.tree.contains("ErrorItem"), "{}", parsed.tree);
+        assert!(parsed.tree.contains("Const #"), "{}", parsed.tree);
+    }
+}

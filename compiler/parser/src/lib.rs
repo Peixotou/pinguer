@@ -114,12 +114,19 @@ impl Parser<'_> {
 
     /// Consumes the delimiter that closes `open`, or reports that `open` is
     /// not closed, pointing at both.
-    fn expect_closing(&mut self, open: Token, close: TokenKind) -> PResult<Token> {
+    ///
+    /// At a `}` or the end of the file nothing can complete the construct
+    /// but the missing delimiter, so after reporting it parsing continues
+    /// as if it had been there (ADR-0029): the construct is kept, and the
+    /// `}` is left for the block that it closes. Elsewhere the caller
+    /// recovers as from any other error.
+    fn expect_closing(&mut self, open: Token, close: TokenKind) -> PResult<()> {
         if self.cursor.at(close) {
-            return Ok(self.cursor.bump());
+            self.cursor.bump();
+            return Ok(());
         }
         let found = self.cursor.current();
-        Err(self.error(
+        let reported = self.error(
             Diagnostic::error(format!(
                 "expected {close} to close {}, found {}",
                 open.kind,
@@ -128,7 +135,11 @@ impl Parser<'_> {
             .with_code(codes::UNCLOSED_DELIMITER)
             .with_primary(found.span, format!("expected {close}"))
             .with_secondary(open.span, "unclosed delimiter"),
-        ))
+        );
+        match found.kind {
+            TokenKind::RBrace | TokenKind::Eof => Ok(()),
+            _ => Err(reported),
+        }
     }
 
     /// Returns `true` at a `Separator = NEWLINE | ";"`.
