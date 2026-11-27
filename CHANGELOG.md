@@ -38,7 +38,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 - Scalability tests with inputs of up to 5 MB and a front-end benchmark
   (`cargo bench -p pinguer_cli --bench scalability`).
 - `pinguer_ast`, the syntax tree with node IDs and spans, and its
-  deterministic text rendering.
+  deterministic text rendering. Its layout keeps the heap at 62–75 bytes
+  per node on 10 MB inputs (ADR-0028).
 - `pinguer_parser`, a parser for the complete v0.1 grammar: precedence
   climbing with one node per operator chain, literal decoding, the layout
   rules for `{` and `else`, error recovery at statement and item
@@ -52,17 +53,6 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   as not supported (`P2010`); `f<T>(x)`, parsed as comparisons, gets a note.
 - Unclosed delimiters closed at the same token are reported as one
   diagnostic, with at most eight marked delimiters and a count.
-
-### Changed
-
-- The syntax tree stores lists as boxed slices, integer literals as two
-  64-bit halves and the type of a conversion and of a binding annotation
-  boxed, which reduced its heap by 54–72% per node on 10 MB inputs
-  (ADR-0028). The tokens are freed before node numbering.
-
-### Removed
-
-- `TypeKind::Error`, which the parser never produced.
 
 ### Fixed
 

@@ -37,9 +37,8 @@ and character values are quoted and escaped. Some lines are parts of a
 node rather than nodes, and have no ID: `Op` lines, the operators of a
 chain, between its operands, and the `Branch` and `Else` lines of an `if`
 statement. Error nodes are `ErrorItem`, `ErrorStmt` and `ErrorExpr`. The
-tree is printed
-even when the file has errors, so that error recovery can be inspected, and
-the exit status is then 1.
+tree is printed even when the file has errors, so that error recovery can
+be inspected, and the exit status is then 1.
 
 ## 2. Planned commands
 

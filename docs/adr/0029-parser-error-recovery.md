@@ -46,8 +46,8 @@ risks never terminating on unexpected input.
   secondary label at the opening one. Delimiters left open at the same
   token, such as the blocks still open at the end of the file, are one
   diagnostic: the innermost is reported as usual, and the enclosing ones
-  are further secondary labels, at most eight, with a note that counts
-  them all and the ones not marked. A closing delimiter without an opening
+  are further secondary labels, at most eight secondary labels in all,
+  with a note that counts the delimiters and the ones not marked. A closing delimiter without an opening
   one is reported and skipped.
 * **Missing tokens.** When a token is missing but the construct can be
   completed (for example a `)` missing at the end of an argument list), the

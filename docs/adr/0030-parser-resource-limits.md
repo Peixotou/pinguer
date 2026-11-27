@@ -69,13 +69,15 @@ therefore leave diagnostics, node construction and non-recursive cases to
 helpers. Measured on the same thread by the smallest stack that parses,
 renders and drops each construct, the stack used per level of nesting fell
 from 7.0 KiB to under 2 KiB for parentheses, from 3.2 KiB to 1.6 KiB for
-blocks and from 4.5 KiB to 2.9 KiB for `if` statements. Nested `while`
-statements and nested call arguments (`f(f(…))`) use about 2.6 KiB per
-level, chains of calls (`f()()`) and prefix operators about 1 KiB. The
-deepest cases, 256 nested `if` statements and 256 nested call arguments,
-need about 770 KiB and 710 KiB of the 1 MiB. The stack guarantee test
-covers every kind of construct, these included, and fails if a change
-removes that margin.
+blocks and from 4.5 KiB to 2.9 KiB for `if` statements. The smaller nodes
+of ADR-0028 reduced the frames further: 255 levels now need about
+640 KiB of the 1 MiB for the deepest cases, nested `if` statements and
+nested call arguments (`f(f(…))`), 515 KiB for `while` statements,
+390 KiB for parentheses, 325 KiB for blocks and 260 KiB for chains of
+calls (`f()()`) and prefix operators. Windows rounds thread stacks to
+64 KiB, so the figures are accurate to that step. The stack guarantee
+test covers every kind of construct, these included, and fails if a
+change removes the margin.
 
 ## Alternatives considered
 

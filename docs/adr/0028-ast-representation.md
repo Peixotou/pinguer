@@ -24,7 +24,7 @@ server will reuse it ([COMPILER_ARCHITECTURE.md §3.6](../architecture/COMPILER_
   `Vec` keeps the capacity it grew to, at least four elements, which for
   the many one-operand chains and short argument lists was most of the
   memory of the tree. Measured with a counting allocator on 10 MB inputs,
-  boxed slices reduced the heap of the tree from 144–228 to 78–92 bytes
+  boxed slices reduced the heap of the tree from 144–222 to 78–92 bytes
   per node, at the cost of one shrinking reallocation per list.
 * Expressions are 64 bytes on 64-bit targets. An integer literal stores its
   value as two `u64` halves (`IntValue`), because a `u128` field would align
@@ -38,6 +38,9 @@ server will reuse it ([COMPILER_ARCHITECTURE.md §3.6](../architecture/COMPILER_
   grew by 5%. Boxing the whole binding instead made statements smaller
   still, but cost an allocation for every binding and enlarged programs
   that declare variables, so it was not adopted.
+* Together, these layouts reduced the heap of the tree by 54–72% per node
+  on 10 MB inputs of five shapes, with 1.3–1.4 allocations per node
+  instead of 1.0, and made parsing faster.
 * Node kinds are enums over the v0.1 constructs only: items (`import`,
   function, constant), statements, expressions and types. Each kind exists
   because the grammar has it; nothing is added for planned features.
@@ -82,8 +85,10 @@ server will reuse it ([COMPILER_ARCHITECTURE.md §3.6](../architecture/COMPILER_
   reassociate or reorder a chain, since checked overflow, `-`, `/`, `%`,
   shifts and floating-point arithmetic depend on the grouping. The
   intermediate results of a chain have no node ID. Every v0.1 binary
-  operator takes two operands of the same type, so an intermediate result
-  has the type of the operands; a side table that needs one per operator,
+  operator takes two operands of the same type, and the operators whose
+  result has another type, the comparisons, cannot be chained; so an
+  intermediate result has the type of the operands (`bool` for `&&` and
+  `||`). A side table that needs one per operator,
   for example for the location of a trap, keys it by the chain's ID and
   the operator's index, and reports at the operator's span.
 
@@ -91,7 +96,7 @@ server will reuse it ([COMPILER_ARCHITECTURE.md §3.6](../architecture/COMPILER_
 
 | Literal | Stored as | Why |
 |---|---|---|
-| Integer | the value as `Option<u128>` and the base; `None` when the value needs more than 128 bits | The type checker chooses the type from the context and checks the range; 128 bits cover every planned integer type, and `None` keeps a too-large literal reportable instead of truncated. |
+| Integer | the value as `Option<IntValue>`, up to 128 bits, and the base; `None` when the value needs more than 128 bits | The type checker chooses the type from the context and checks the range; 128 bits cover every planned integer type, and `None` keeps a too-large literal reportable instead of truncated. |
 | Floating-point | the literal's digits with separators removed, for example `6.02e23` | Rounding is done once, at the expected type, by the standard library's correctly rounded and locale-independent parser; converting to `f64` first would round `f32` literals twice. |
 | String | the decoded text | Escapes are resolved once. |
 | Character | the decoded `char` | |
