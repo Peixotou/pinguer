@@ -169,6 +169,8 @@ impl Parser<'_> {
 /// tightly. The order is that of OPERATORS.md §1, which numbers the same
 /// levels from the tightest; the planned operators have no level yet.
 mod precedence {
+    pub(super) const OR: u8 = 2;
+    pub(super) const AND: u8 = 3;
     pub(super) const COMPARISON: u8 = 4;
     pub(super) const BIT_OR: u8 = 5;
     pub(super) const BIT_XOR: u8 = 6;
@@ -199,6 +201,8 @@ fn binary_op(kind: TokenKind) -> Option<(ast::BinaryOp, u8)> {
         TokenKind::LtEq => (B::Le, COMPARISON),
         TokenKind::Gt => (B::Gt, COMPARISON),
         TokenKind::GtEq => (B::Ge, COMPARISON),
+        TokenKind::AmpAmp => (B::And, AND),
+        TokenKind::PipePipe => (B::Or, OR),
         _ => return None,
     })
 }

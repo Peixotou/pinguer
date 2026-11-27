@@ -624,3 +624,35 @@ mod compare_expr {
         assert_eq!(shape("(a < b) == c"), "((paren (a < b)) == c)");
     }
 }
+
+/// `AndExpr = CompareExpr , { "&&" , CompareExpr }`,
+/// `OrExpr = AndExpr , { "||" , AndExpr }`
+mod logical_expr {
+    use super::*;
+
+    #[test]
+    fn and_binds_more_tightly_than_or() {
+        assert_eq!(shape("a || b && c"), "(a || (b && c))");
+        assert_eq!(shape("a && b || c && d"), "((a && b) || (c && d))");
+    }
+
+    #[test]
+    fn comparisons_bind_more_tightly_than_and() {
+        assert_eq!(shape("a < b && c == d"), "((a < b) && (c == d))");
+    }
+
+    #[test]
+    fn long_conditions_are_one_chain_per_level() {
+        assert_eq!(shape("a && b && c && d"), "(a && b && c && d)");
+        // A condition continues on the next line after an operator.
+        assert_eq!(shape("a ||\n    b"), "(a || b)");
+    }
+
+    #[test]
+    fn every_level_in_one_expression() {
+        assert_eq!(
+            shape("a || b && c == d | e ^ f & g << h + i * j"),
+            "(a || (b && (c == (d | (e ^ (f & (g << (h + (i * j)))))))))"
+        );
+    }
+}
