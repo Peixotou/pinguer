@@ -129,6 +129,9 @@ define_codes! {
     EXPECTED_TYPE = 2007, "expected type";
     /// An opening delimiter whose closing delimiter is missing.
     UNCLOSED_DELIMITER = 2008, "unclosed delimiter";
+    /// A comparison operator applied to the result of another, such as
+    /// `a < b < c`.
+    CHAINED_COMPARISON = 2009, "comparison operators cannot be chained";
 }
 
 #[cfg(test)]

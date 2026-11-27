@@ -18,6 +18,8 @@ struct Parsed {
     messages: Vec<String>,
     /// Source text covered by each diagnostic's primary label.
     labelled: Vec<String>,
+    /// Notes of each diagnostic.
+    notes: Vec<Vec<String>>,
 }
 
 fn parse(text: &str) -> Parsed {
@@ -41,6 +43,7 @@ fn parse(text: &str) -> Parsed {
             .iter()
             .map(|d| map.snippet(d.main_label().unwrap().span).to_owned())
             .collect(),
+        notes: diagnostics.iter().map(|d| d.notes.clone()).collect(),
     }
 }
 
@@ -580,5 +583,44 @@ mod bitwise_expr {
         for text in ["const X = a &", "const X = a ^", "const X = | a"] {
             assert_eq!(parse(text).codes, ["P2004"], "{text}");
         }
+    }
+}
+
+/// `CompareExpr = BitOrExpr , [ CompareOp , BitOrExpr ]`,
+/// `CompareOp = "==" | "!=" | "<" | "<=" | ">" | ">="`
+mod compare_expr {
+    use super::*;
+
+    #[test]
+    fn every_comparison_operator() {
+        for op in ["==", "!=", "<", "<=", ">", ">="] {
+            assert_eq!(shape(&format!("a {op} b")), format!("(a {op} b)"));
+        }
+    }
+
+    #[test]
+    fn bitwise_operators_bind_more_tightly_than_comparisons() {
+        assert_eq!(shape("flags & MASK == 0"), "((flags & MASK) == 0)");
+        assert_eq!(shape("a | b < c"), "((a | b) < c)");
+    }
+
+    #[test]
+    fn comparisons_cannot_be_chained() {
+        for text in ["a < b < c", "a == b != c", "a <= b > c"] {
+            let parsed = parse(&format!("const X = {text}"));
+            assert_eq!(parsed.codes, ["P2009"], "{text}");
+            assert_eq!(parsed.messages, ["comparison operators cannot be chained"]);
+        }
+        let parsed = parse("const X = a < b < c");
+        assert_eq!(parsed.labelled, ["<"]);
+        assert_eq!(
+            parsed.notes,
+            [[
+                "comparisons are non-associative: `a < b < c` does not mean `a < b && b < c`, \
+                 so write each comparison separately"
+            ]]
+        );
+        // Parentheses make the grouping explicit and are accepted.
+        assert_eq!(shape("(a < b) == c"), "((paren (a < b)) == c)");
     }
 }

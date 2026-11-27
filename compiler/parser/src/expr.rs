@@ -5,7 +5,7 @@ use pinguer_diagnostics::{Diagnostic, codes};
 use pinguer_lexer::{Keyword, TokenKind};
 
 use crate::ids::PENDING;
-use crate::{PResult, Parser, literal};
+use crate::{PResult, Parser, Reported, literal};
 
 impl Parser<'_> {
     /// `Expr = OrExpr`
@@ -33,6 +33,11 @@ impl Parser<'_> {
             while let Some((op, precedence)) = binary_op(self.cursor.kind())
                 && precedence == level
             {
+                if let Some(previous) = rest.last()
+                    && op.is_comparison()
+                {
+                    return Err(self.chained_comparison(previous));
+                }
                 let op_span = self.cursor.bump().span;
                 let operand = self.binary(level + 1)?;
                 rest.push(ast::BinaryOperand {
@@ -51,6 +56,23 @@ impl Parser<'_> {
             };
         }
         Ok(left)
+    }
+
+    /// Reports a comparison operator that follows another one: comparisons
+    /// are non-associative (`CompareExpr = BitOrExpr , [ CompareOp ,
+    /// BitOrExpr ]`).
+    fn chained_comparison(&mut self, previous: &ast::BinaryOperand) -> Reported {
+        let second = self.cursor.current();
+        self.error(
+            Diagnostic::error("comparison operators cannot be chained")
+                .with_code(codes::CHAINED_COMPARISON)
+                .with_primary(second.span, "second comparison")
+                .with_secondary(previous.op_span, "first comparison")
+                .with_note(
+                    "comparisons are non-associative: `a < b < c` does not mean \
+                     `a < b && b < c`, so write each comparison separately",
+                ),
+        )
     }
 
     /// `UnaryExpr = ( "-" | "!" | "~" ) , UnaryExpr | PostfixExpr`
@@ -147,6 +169,7 @@ impl Parser<'_> {
 /// tightly. The order is that of OPERATORS.md §1, which numbers the same
 /// levels from the tightest; the planned operators have no level yet.
 mod precedence {
+    pub(super) const COMPARISON: u8 = 4;
     pub(super) const BIT_OR: u8 = 5;
     pub(super) const BIT_XOR: u8 = 6;
     pub(super) const BIT_AND: u8 = 7;
@@ -170,6 +193,12 @@ fn binary_op(kind: TokenKind) -> Option<(ast::BinaryOp, u8)> {
         TokenKind::Amp => (B::BitAnd, BIT_AND),
         TokenKind::Caret => (B::BitXor, BIT_XOR),
         TokenKind::Pipe => (B::BitOr, BIT_OR),
+        TokenKind::EqEq => (B::Eq, COMPARISON),
+        TokenKind::BangEq => (B::Ne, COMPARISON),
+        TokenKind::Lt => (B::Lt, COMPARISON),
+        TokenKind::LtEq => (B::Le, COMPARISON),
+        TokenKind::Gt => (B::Gt, COMPARISON),
+        TokenKind::GtEq => (B::Ge, COMPARISON),
         _ => return None,
     })
 }
