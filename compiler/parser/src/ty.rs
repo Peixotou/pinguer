@@ -47,4 +47,17 @@ impl Parser<'_> {
             kind,
         })
     }
+
+    /// The type of a parameter, a return type or a type annotation.
+    ///
+    /// No v0.1 syntax puts `<` after such a type, so there it can only begin
+    /// the type arguments of later versions (GENERICS.md). After `as`, by
+    /// contrast, `<` is a comparison: `x as int < y`.
+    pub(crate) fn declared_ty(&mut self) -> PResult<ast::Type> {
+        let ty = self.ty()?;
+        if self.cursor.at(TokenKind::Lt) {
+            return Err(self.unsupported_syntax("a type argument list"));
+        }
+        Ok(ty)
+    }
 }

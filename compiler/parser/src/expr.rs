@@ -101,16 +101,22 @@ impl Parser<'_> {
     /// BitOrExpr ]`).
     fn chained_comparison(&mut self, previous: &ast::BinaryOperand) -> Reported {
         let second = self.cursor.current();
-        self.error(
-            Diagnostic::error("comparison operators cannot be chained")
-                .with_code(codes::CHAINED_COMPARISON)
-                .with_primary(second.span, "second comparison")
-                .with_secondary(previous.op_span, "first comparison")
-                .with_note(
-                    "comparisons are non-associative: `a < b < c` does not mean \
-                     `a < b && b < c`, so write each comparison separately",
-                ),
-        )
+        let mut diagnostic = Diagnostic::error("comparison operators cannot be chained")
+            .with_code(codes::CHAINED_COMPARISON)
+            .with_primary(second.span, "second comparison")
+            .with_secondary(previous.op_span, "first comparison")
+            .with_note(
+                "comparisons are non-associative: `a < b < c` does not mean \
+                 `a < b && b < c`, so write each comparison separately",
+            );
+        // `f<int>(x)` reads as two comparisons; explicit type arguments are
+        // unresolved in GENERICS.md, so the syntax is parsed as written.
+        if previous.op == ast::BinaryOp::Lt && second.kind == TokenKind::Gt {
+            diagnostic = diagnostic.with_note(
+                "explicit type arguments such as `f<T>(x)` are not supported in Pinguer v0.1",
+            );
+        }
+        self.error(diagnostic)
     }
 
     /// `CastExpr = UnaryExpr , { "as" , Type }`, with

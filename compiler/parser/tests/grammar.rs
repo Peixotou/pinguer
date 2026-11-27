@@ -1856,3 +1856,64 @@ mod planned_syntax_outside_expressions {
         }
     }
 }
+
+mod generic_syntax {
+    use super::*;
+
+    #[test]
+    fn generic_parameter_and_type_argument_lists_are_planned() {
+        for (text, message) in [
+            (
+                "func identity<T>(value: T) -> T {\n    return value\n}",
+                "a generic parameter list is not supported in Pinguer v0.1",
+            ),
+            (
+                "func f(a: List<int>) {\n}",
+                "a type argument list is not supported in Pinguer v0.1",
+            ),
+            (
+                "func f() -> Option<int> {\n}",
+                "a type argument list is not supported in Pinguer v0.1",
+            ),
+            (
+                "func f() {\n    let x: List<int> = g()\n}",
+                "a type argument list is not supported in Pinguer v0.1",
+            ),
+            (
+                "const X: Map<int, int> = 1",
+                "a type argument list is not supported in Pinguer v0.1",
+            ),
+        ] {
+            let parsed = parse(text);
+            assert_eq!(parsed.codes, ["P2010"], "{text:?}");
+            assert_eq!(parsed.messages, [message], "{text:?}");
+            assert_eq!(parsed.labelled, ["<"], "{text:?}");
+        }
+    }
+
+    #[test]
+    fn comparisons_are_not_taken_for_type_arguments() {
+        assert_eq!(shape("x as int < y"), "((as x int) < y)");
+        assert_eq!(shape("a < b"), "(a < b)");
+        tree("func f() {\n    let b = (x as int) < (y as int)\n}");
+        // Explicit type arguments are unresolved in GENERICS.md: the call
+        // is two comparisons, with a note.
+        let parsed = parse("const X = f<int>(5)");
+        assert_eq!(parsed.codes, ["P2009"]);
+        assert!(
+            parsed.notes[0]
+                .iter()
+                .any(|note| note.contains("explicit type arguments")),
+            "{:?}",
+            parsed.notes
+        );
+        let parsed = parse("const X = a < b < c");
+        assert!(
+            parsed.notes[0]
+                .iter()
+                .all(|note| !note.contains("type arguments")),
+            "{:?}",
+            parsed.notes
+        );
+    }
+}

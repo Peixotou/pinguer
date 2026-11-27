@@ -137,11 +137,14 @@ impl Parser<'_> {
     fn func(&mut self) -> PResult<ast::ItemKind> {
         self.cursor.bump();
         let name = self.ident()?;
+        if self.cursor.at(TokenKind::Lt) {
+            return Err(self.unsupported_syntax("a generic parameter list"));
+        }
         let open = self.expect(TokenKind::LParen)?;
         let params = self.params(open)?;
         let ret = if self.cursor.at(TokenKind::Arrow) {
             self.cursor.bump();
-            Some(self.ty()?)
+            Some(self.declared_ty()?)
         } else {
             None
         };
@@ -187,7 +190,7 @@ impl Parser<'_> {
             ));
         }
         self.cursor.bump();
-        let ty = self.ty()?;
+        let ty = self.declared_ty()?;
         Ok(ast::Param {
             id: PENDING,
             span: self.span_from(start),
@@ -203,7 +206,7 @@ impl Parser<'_> {
         let name = self.ident()?;
         let ty = if self.cursor.at(TokenKind::Colon) {
             self.cursor.bump();
-            Some(Box::new(self.ty()?))
+            Some(Box::new(self.declared_ty()?))
         } else {
             None
         };
