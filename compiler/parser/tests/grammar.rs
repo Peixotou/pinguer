@@ -532,3 +532,27 @@ mod add_expr {
         assert_eq!(parsed.tree.matches(" Op ").count(), 99_999);
     }
 }
+
+/// `ShiftExpr = AddExpr , { ( "<<" | ">>" ) , AddExpr }`
+mod shift_expr {
+    use super::*;
+
+    #[test]
+    fn shifts_chain_from_left_to_right() {
+        assert_eq!(shape("a << b >> c"), "(a << b >> c)");
+    }
+
+    #[test]
+    fn additive_operators_bind_more_tightly() {
+        assert_eq!(shape("a << b + c"), "(a << (b + c))");
+        assert_eq!(shape("a - b >> c"), "((a - b) >> c)");
+    }
+
+    #[test]
+    fn a_shift_needs_a_right_operand() {
+        assert_eq!(
+            parse("const X = a <<").messages,
+            ["expected expression, found end of file"]
+        );
+    }
+}
