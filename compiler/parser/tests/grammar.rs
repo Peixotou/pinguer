@@ -1113,3 +1113,21 @@ mod return_statement {
         assert!(body.contains("      ExprStmt #3 @3:5-3:8\n"), "{body}");
     }
 }
+
+/// `Statement = … | "break" | "continue" | …`
+mod loop_control {
+    use super::*;
+
+    #[test]
+    fn break_and_continue_are_statements() {
+        let body = tree("func f() {\n    break\n    continue\n}");
+        assert!(body.contains("      Break #2 @2:5-2:10\n"), "{body}");
+        assert!(body.contains("      Continue #3 @3:5-3:13\n"), "{body}");
+    }
+
+    #[test]
+    fn they_take_no_operand() {
+        // Labels and values are not part of v0.1.
+        assert_eq!(parse("func f() { break x }").codes, ["P2003"]);
+    }
+}

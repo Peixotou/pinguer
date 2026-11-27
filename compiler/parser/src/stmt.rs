@@ -41,19 +41,31 @@ impl Parser<'_> {
     }
 
     /// `Statement = LetDecl | VarDecl | ConstDecl | Assignment | ExprStatement
-    /// | … | ReturnStatement | …`
+    /// | … | ReturnStatement | "break" | "continue" | …`
     fn stmt(&mut self) -> ast::Stmt {
         let start = self.start();
-        let binding = match self.cursor.kind() {
-            TokenKind::Keyword(Keyword::Let) => Some(ast::BindingKind::Let),
-            TokenKind::Keyword(Keyword::Var) => Some(ast::BindingKind::Var),
-            TokenKind::Keyword(Keyword::Const) => Some(ast::BindingKind::Const),
-            _ => None,
-        };
-        let kind = match binding {
-            Some(kind) => self.binding(kind).map(ast::StmtKind::Binding),
-            None if self.cursor.at(TokenKind::Keyword(Keyword::Return)) => self.return_stmt(),
-            None => self.expr_stmt(),
+        let kind = match self.cursor.kind() {
+            TokenKind::Keyword(Keyword::Let) => self
+                .binding(ast::BindingKind::Let)
+                .map(ast::StmtKind::Binding),
+            TokenKind::Keyword(Keyword::Var) => self
+                .binding(ast::BindingKind::Var)
+                .map(ast::StmtKind::Binding),
+            TokenKind::Keyword(Keyword::Const) => self
+                .binding(ast::BindingKind::Const)
+                .map(ast::StmtKind::Binding),
+            TokenKind::Keyword(Keyword::Return) => self.return_stmt(),
+            // Whether they are inside a loop is checked by semantic
+            // analysis.
+            TokenKind::Keyword(Keyword::Break) => {
+                self.cursor.bump();
+                Ok(ast::StmtKind::Break)
+            }
+            TokenKind::Keyword(Keyword::Continue) => {
+                self.cursor.bump();
+                Ok(ast::StmtKind::Continue)
+            }
+            _ => self.expr_stmt(),
         };
         ast::Stmt {
             id: PENDING,
