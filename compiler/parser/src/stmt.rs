@@ -11,6 +11,20 @@ impl Parser<'_> {
     /// `Block = "{" , { Separator } , [ Statement , { Separator ,
     /// { Separator } , Statement } , { Separator } ] , "}"`
     pub(crate) fn block(&mut self) -> PResult<ast::Block> {
+        // Layout rule: `{` is on the same line as what it belongs to. After
+        // reporting a brace on the next line, parse the block as if it were
+        // in place, so the rest of the construct is not reported again.
+        if self.cursor.at(TokenKind::Newline) && self.cursor.peek(1) == TokenKind::LBrace {
+            self.cursor.bump();
+            let brace = self.cursor.current();
+            self.error(
+                Diagnostic::error("`{` must be on the same line as the code it belongs to")
+                    .with_code(codes::BRACE_ON_NEXT_LINE)
+                    .with_primary(brace.span, "this `{` starts a new line")
+                    .with_note("a line break before `{` ends the declaration or statement")
+                    .with_help("move the `{` to the end of the previous line"),
+            );
+        }
         let start = self.start();
         let open = self.expect(TokenKind::LBrace)?;
         let mut stmts = Vec::new();

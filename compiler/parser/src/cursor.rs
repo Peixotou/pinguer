@@ -47,6 +47,15 @@ impl Cursor {
         self.current().kind
     }
 
+    /// Returns the kind of the token `n` positions after the current one,
+    /// or [`TokenKind::Eof`] past the end. The grammar never needs more
+    /// than one token of lookahead.
+    pub(crate) fn peek(&self, n: usize) -> TokenKind {
+        self.tokens
+            .get(self.pos + n)
+            .map_or(TokenKind::Eof, |token| token.kind)
+    }
+
     /// Returns `true` if the current token has the given kind.
     pub(crate) fn at(&self, kind: TokenKind) -> bool {
         self.kind() == kind
@@ -86,6 +95,9 @@ mod tests {
     fn moves_through_tokens_and_stops_at_the_end() {
         let mut c = cursor("a (b");
         assert_eq!(c.kind(), TokenKind::Ident);
+        assert_eq!(c.peek(1), TokenKind::LParen);
+        assert_eq!(c.peek(3), TokenKind::Eof);
+        assert_eq!(c.peek(100), TokenKind::Eof);
         assert_eq!(c.bump().kind, TokenKind::Ident);
         assert!(c.at(TokenKind::LParen));
         c.bump();

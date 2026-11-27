@@ -1259,3 +1259,33 @@ mod block_statement {
         );
     }
 }
+
+/// Layout rule of GRAMMAR.ebnf: `{` must be on the same line as the
+/// construct that introduces it.
+mod brace_placement {
+    use super::*;
+
+    #[test]
+    fn a_brace_on_the_next_line_is_reported_once() {
+        for text in [
+            "func f()\n{\n}",
+            "func f() {\n    if a\n    {\n    }\n}",
+            "func f() {\n    while a\n    {\n    }\n}",
+            "func f() {\n    if a {\n    } else\n    {\n    }\n}",
+        ] {
+            let parsed = parse(text);
+            assert_eq!(parsed.codes, ["P2014"], "{text}");
+            assert_eq!(parsed.labelled, ["{"], "{text}");
+            assert_eq!(
+                parsed.messages,
+                ["`{` must be on the same line as the code it belongs to"]
+            );
+        }
+    }
+
+    #[test]
+    fn the_construct_is_still_parsed() {
+        let parsed = parse("func f()\n{\n    g()\n}");
+        assert!(parsed.tree.contains("ExprStmt"), "{}", parsed.tree);
+    }
+}

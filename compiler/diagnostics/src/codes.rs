@@ -141,6 +141,8 @@ define_codes! {
     EXPRESSION_STATEMENT = 2012, "expression cannot be used as a statement";
     /// An assignment whose target is not a variable name.
     INVALID_ASSIGNMENT_TARGET = 2013, "invalid assignment target";
+    /// A `{` on the line after the construct it belongs to.
+    BRACE_ON_NEXT_LINE = 2014, "`{` on the next line";
 }
 
 #[cfg(test)]
