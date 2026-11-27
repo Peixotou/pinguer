@@ -1797,3 +1797,59 @@ mod one_diagnostic_per_problem {
         assert_eq!(parsed.codes, ["P2008", "P2008"]);
     }
 }
+
+mod planned_syntax_outside_expressions {
+    use super::*;
+
+    #[test]
+    fn planned_syntax_where_an_item_starts() {
+        let parsed = parse("@test\nfunc f() {\n}\n[1]\nconst X = 1");
+        assert_eq!(parsed.codes, ["P2010", "P2010"]);
+        assert_eq!(
+            parsed.messages,
+            [
+                "an attribute is not supported in Pinguer v0.1",
+                "indexing and array syntax `[` is not supported in Pinguer v0.1",
+            ]
+        );
+        assert!(parsed.tree.contains("Func #"), "{}", parsed.tree);
+        assert!(parsed.tree.contains("Const #"), "{}", parsed.tree);
+    }
+
+    #[test]
+    fn planned_type_syntax() {
+        for (text, labelled) in [
+            ("func f(a: int?) {\n}", "?"),
+            ("const X: int?? = 1", "??"),
+            ("func f(a: [int]) {\n}", "["),
+            ("func f(a: int[]) {\n}", "["),
+        ] {
+            let parsed = parse(text);
+            assert_eq!(parsed.codes, ["P2010"], "{text}: {:?}", parsed.messages);
+            assert_eq!(parsed.labelled, [labelled], "{text}");
+        }
+        assert_eq!(
+            parse("func f(a: int?) {\n}").messages,
+            ["the optional type syntax `T?` is not supported in Pinguer v0.1"]
+        );
+        // `<` after a type is a comparison, not type arguments.
+        assert_eq!(shape("x as int < y"), "((as x int) < y)");
+    }
+
+    #[test]
+    fn the_wildcard_is_planned_wherever_it_appears() {
+        for text in [
+            "func f() {\n    let _ = g()\n}",
+            "func f() {\n    _ = g()\n}",
+            "func _() {\n}",
+        ] {
+            let parsed = parse(text);
+            assert_eq!(parsed.codes, ["P2010"], "{text:?}");
+            assert_eq!(
+                parsed.messages,
+                ["the wildcard `_` is not supported in Pinguer v0.1"],
+                "{text:?}"
+            );
+        }
+    }
+}

@@ -119,6 +119,9 @@ impl Parser<'_> {
 
     /// `IDENT`
     fn ident(&mut self) -> PResult<ast::Ident> {
+        if expr::planned_syntax(self.cursor.kind()).is_some() {
+            return Err(self.unsupported());
+        }
         if self.cursor.at(TokenKind::Ident) {
             let token = self.cursor.bump();
             Ok(ast::Ident {

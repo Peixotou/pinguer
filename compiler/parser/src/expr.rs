@@ -75,8 +75,14 @@ impl Parser<'_> {
     /// Reports the current token, which belongs to syntax that later
     /// versions add (see [`planned_syntax`]).
     pub(crate) fn unsupported(&mut self) -> Reported {
+        let what = planned_syntax(self.cursor.kind()).unwrap_or("this syntax");
+        self.unsupported_syntax(what)
+    }
+
+    /// Reports the current token as part of `what`, syntax that later
+    /// versions add.
+    pub(crate) fn unsupported_syntax(&mut self, what: &str) -> Reported {
         let found = self.cursor.current();
-        let what = planned_syntax(found.kind).unwrap_or("this syntax");
         self.error(
             Diagnostic::error(format!("{what} is not supported in Pinguer v0.1"))
                 .with_code(codes::UNSUPPORTED_SYNTAX)
@@ -397,6 +403,7 @@ pub(crate) fn planned_syntax(kind: TokenKind) -> Option<&'static str> {
         TokenKind::DotDot | TokenKind::DotDotEq => "range syntax",
         TokenKind::FatArrow => "`=>`",
         TokenKind::At => "an attribute",
+        TokenKind::Underscore => "the wildcard `_`",
         _ => return None,
     })
 }

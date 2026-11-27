@@ -97,6 +97,7 @@ impl Parser<'_> {
                 "at the top level, only `import`, `func` and `const` declarations are allowed",
             )),
             kind if crate::is_closing_delimiter(kind) => Err(self.unexpected_closing_delimiter()),
+            kind if crate::expr::planned_syntax(kind).is_some() => Err(self.unsupported()),
             _ => Err(self.expected_item()),
         };
         self.depth = depth;
