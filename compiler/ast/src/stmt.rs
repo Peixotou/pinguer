@@ -43,6 +43,15 @@ pub enum StmtKind {
         /// The assigned value.
         value: Expr,
     },
+    /// An `if` statement with all of its `else if` branches.
+    If(If),
+    /// `while cond { body }`.
+    While {
+        /// The loop condition.
+        cond: Expr,
+        /// The loop body.
+        body: Block,
+    },
     /// An expression used as a statement. The grammar allows any postfix
     /// expression; the rule that it must be a call is checked by semantic
     /// analysis.
@@ -58,6 +67,31 @@ pub enum StmtKind {
     /// A statement that could not be parsed. A diagnostic has been
     /// reported.
     Error,
+}
+
+/// `if c1 { … } else if c2 { … } else { … }`.
+///
+/// The grammar nests each `else if` inside the previous `else`; the tree
+/// keeps the branches in one list, so its depth does not grow with the
+/// length of the chain.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct If {
+    /// The `if` branch followed by every `else if` branch, in order. Never
+    /// empty.
+    pub branches: Vec<IfBranch>,
+    /// The final `else` block, if there is one.
+    pub else_block: Option<Block>,
+}
+
+/// One condition of an [`If`] and the block it guards.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IfBranch {
+    /// The tokens from `if` to the end of the block.
+    pub span: Span,
+    /// The condition.
+    pub cond: Expr,
+    /// The block executed when the condition is `true`.
+    pub block: Block,
 }
 
 /// A `let`, `var` or `const` declaration.

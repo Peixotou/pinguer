@@ -17,7 +17,7 @@ use std::fmt;
 use pinguer_source::Span;
 
 pub use expr::{Base, BinaryOp, Expr, ExprKind, Literal, UnaryOp};
-pub use stmt::{AssignOp, Binding, BindingKind, Block, Stmt, StmtKind};
+pub use stmt::{AssignOp, Binding, BindingKind, Block, If, IfBranch, Stmt, StmtKind};
 pub use ty::{Type, TypeKind};
 
 /// Identifies a node of one file's syntax tree.
