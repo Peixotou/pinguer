@@ -1380,3 +1380,73 @@ mod statement_recovery {
         assert_eq!(parsed.codes, ["P2012", "P2010"]);
     }
 }
+
+mod item_recovery {
+    use super::*;
+
+    /// Returns the names of the functions and constants in the tree.
+    fn names(tree: &str) -> Vec<&str> {
+        tree.lines()
+            .filter(|line| line.starts_with("  Func ") || line.starts_with("  Const "))
+            .map(|line| line.rsplit(' ').next().unwrap())
+            .collect()
+    }
+
+    #[test]
+    fn each_broken_item_is_reported_once_and_the_rest_parses() {
+        let text = "import\nconst = 1\nfunc f() -> {\n}\nfunc g() {\n    h()\n}\nconst X = 1";
+        let parsed = parse(text);
+        assert_eq!(
+            parsed.codes,
+            ["P2002", "P2002", "P2007"],
+            "{:?}",
+            parsed.messages
+        );
+        assert_eq!(names(&parsed.tree), ["g", "X"], "{}", parsed.tree);
+        assert_eq!(
+            parsed.tree.matches("ErrorItem").count(),
+            3,
+            "{}",
+            parsed.tree
+        );
+    }
+
+    #[test]
+    fn a_function_body_is_skipped_whole() {
+        // `const` starts a line inside the skipped body, at depth 1.
+        let parsed = parse("func f() x {\n    const Y = 1\n}\nfunc g() {\n}");
+        assert_eq!(parsed.codes, ["P2005"]);
+        assert_eq!(names(&parsed.tree), ["g"], "{}", parsed.tree);
+    }
+
+    #[test]
+    fn an_unclosed_parenthesis_ends_at_the_next_item() {
+        // The lexer produces no line breaks inside `(`, so line starts are
+        // found in the source text.
+        let parsed = parse("const X = (1\n  \tfunc g() {\n}");
+        assert_eq!(parsed.codes, ["P2008"]);
+        assert_eq!(names(&parsed.tree), ["g"], "{}", parsed.tree);
+    }
+
+    #[test]
+    fn an_item_keyword_in_the_middle_of_a_line_does_not_end_recovery() {
+        let parsed = parse("func f( import a\nimport b");
+        assert_eq!(parsed.codes, ["P2002"]);
+        assert!(parsed.tree.contains("Import #"), "{}", parsed.tree);
+        assert_eq!(parsed.tree.matches("Import #").count(), 1);
+    }
+
+    #[test]
+    fn a_missing_separator_skips_to_the_next_line() {
+        let parsed = parse("func f() {} x y\nconst Z = 2");
+        assert_eq!(parsed.codes, ["P2003"]);
+        assert_eq!(names(&parsed.tree), ["f", "Z"], "{}", parsed.tree);
+    }
+
+    #[test]
+    fn tokens_that_cannot_start_an_item_are_skipped() {
+        let parsed = parse("x + 1\n)\nfunc g() {\n}");
+        assert_eq!(parsed.codes, ["P2001"]);
+        assert_eq!(names(&parsed.tree), ["g"], "{}", parsed.tree);
+    }
+}

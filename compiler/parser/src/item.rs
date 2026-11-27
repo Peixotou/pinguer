@@ -16,17 +16,13 @@ impl Parser<'_> {
         self.skip_separators();
         while !self.cursor.at(TokenKind::Eof) {
             let item = self.item();
-            let failed = item.kind == ast::ItemKind::Error;
-            items.push(item);
-            // Until item-level recovery exists, the first error ends the
-            // file.
-            if failed {
-                break;
-            }
-            if !self.cursor.at(TokenKind::Eof) && !self.at_separator() {
+            if item.kind == ast::ItemKind::Error {
+                self.skip_item();
+            } else if !self.cursor.at(TokenKind::Eof) && !self.at_separator() {
                 self.missing_separator("item");
-                break;
+                self.skip_item();
             }
+            items.push(item);
             self.skip_separators();
         }
         ast::File {
@@ -34,6 +30,46 @@ impl Parser<'_> {
             items,
             node_count: 0,
         }
+    }
+
+    /// Skips the rest of an item after an error (ADR-0029): up to `func`,
+    /// `import` or `const` at the start of a line and outside every
+    /// delimiter opened while skipping, or to the end of the file. A
+    /// function body is therefore skipped as a whole, even when it contains
+    /// `const` declarations. Every token is consumed at most once.
+    fn skip_item(&mut self) {
+        let mut depth = 0usize;
+        loop {
+            let token = self.cursor.current();
+            match token.kind {
+                TokenKind::Eof => return,
+                TokenKind::Keyword(Keyword::Func | Keyword::Import | Keyword::Const)
+                    if depth == 0 && self.starts_line(token) =>
+                {
+                    return;
+                }
+                TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => depth += 1,
+                TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => {
+                    depth = depth.saturating_sub(1);
+                }
+                _ => {}
+            }
+            self.cursor.bump();
+        }
+    }
+
+    /// Returns `true` if only spaces and tabs precede `token` on its line.
+    ///
+    /// The source text is consulted rather than `NEWLINE` tokens, because
+    /// inside an unclosed `(` or `[` the lexer produces none. The scan stops
+    /// at the first other character, so it reads only the whitespace
+    /// between `token` and the token before it.
+    fn starts_line(&self, token: Token) -> bool {
+        self.text[..token.span.start as usize]
+            .bytes()
+            .rev()
+            .find(|&byte| byte != b' ' && byte != b'\t')
+            .is_none_or(|byte| byte == b'\n')
     }
 
     /// `Item = ImportDecl | FuncDecl | ConstDecl`
