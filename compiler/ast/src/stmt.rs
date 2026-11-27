@@ -214,12 +214,13 @@ mod tests {
         assert_eq!(keywords, ["let", "var", "const"]);
     }
 
-    /// The sizes that the layout of statements was chosen for (ADR-0028).
+    /// The sizes that the layout of statements was chosen for (ADR-0028),
+    /// as upper bounds (see `expression_sizes`).
     #[cfg(target_pointer_width = "64")]
     #[test]
     fn statement_sizes() {
-        assert_eq!(size_of::<Stmt>(), 136);
-        assert_eq!(size_of::<Binding>(), 112);
-        assert_eq!(size_of::<Block>(), 32);
+        assert!(size_of::<Stmt>() <= 136);
+        assert!(size_of::<Binding>() <= 112);
+        assert!(size_of::<Block>() <= 32);
     }
 }

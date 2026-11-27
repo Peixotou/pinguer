@@ -347,12 +347,14 @@ mod tests {
         );
     }
 
-    /// The sizes that the layout of expressions was chosen for (ADR-0028).
+    /// The sizes that the layout of expressions was chosen for (ADR-0028),
+    /// as upper bounds: a change that enlarges them fails, a compiler that
+    /// lays them out more compactly does not.
     #[cfg(target_pointer_width = "64")]
     #[test]
     fn expression_sizes() {
-        assert_eq!(size_of::<Expr>(), 64);
-        assert_eq!(size_of::<Literal>(), 32);
-        assert_eq!(size_of::<BinaryOperand>(), 80);
+        assert!(size_of::<Expr>() <= 64);
+        assert!(size_of::<Literal>() <= 32);
+        assert!(size_of::<BinaryOperand>() <= 80);
     }
 }
