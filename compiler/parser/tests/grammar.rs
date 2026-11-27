@@ -1166,3 +1166,68 @@ mod while_statement {
         }
     }
 }
+
+/// `IfStatement = "if" , Expr , Block , [ "else" , ( IfStatement | Block ) ]`
+mod if_statement {
+    use super::*;
+
+    #[test]
+    fn if_else_if_else_is_one_node() {
+        let text = "func f() {\n    if a {\n    } else if b {\n        g()\n    } else {\n    }\n}";
+        let expected = concat!(
+            "      If #2 @2:5-6:6\n",
+            "        Branch @2:5-3:6\n",
+            "          Name #3 @2:8-2:9 a\n",
+            "          Block #4 @2:10-3:6\n",
+            "        Branch @3:12-5:6\n",
+            "          Name #5 @3:15-3:16 b\n",
+            "          Block #6 @3:17-5:6\n",
+            "            ExprStmt #7 @4:9-4:12\n",
+            "              Call #8 @4:9-4:12\n",
+            "                Name #9 @4:9-4:10 g\n",
+            "        Else @5:12-6:6\n",
+            "          Block #10 @5:12-6:6\n",
+        );
+        let body = tree(text);
+        assert!(body.contains(expected), "{body}");
+    }
+
+    #[test]
+    fn without_else() {
+        let body = tree("func f() { if a {} }");
+        assert_eq!(body.matches("Branch").count(), 1);
+        assert!(!body.contains("Else"));
+    }
+
+    #[test]
+    fn long_else_if_chains_do_not_nest() {
+        let mut text = String::from("func f() {\n    if c0 {\n    }");
+        for index in 1..5_000 {
+            text.push_str(&format!(" else if c{index} {{\n    }}"));
+        }
+        text.push_str("\n}");
+        let body = tree(&text);
+        assert_eq!(body.matches("Branch").count(), 5_000);
+        // Every branch is at the same depth.
+        assert!(
+            body.lines()
+                .filter(|l| l.contains("Branch"))
+                .all(|l| l.starts_with("        Branch"))
+        );
+    }
+
+    #[test]
+    fn malformed_conditionals() {
+        for (text, message) in [
+            ("func f() { if {} }", "expected expression, found `{`"),
+            ("func f() { if a }", "expected `{`, found `}`"),
+            ("func f() { if a {} else }", "expected `{`, found `}`"),
+            (
+                "func f() { if a {} else b {} }",
+                "expected `{`, found identifier `b`",
+            ),
+        ] {
+            assert_eq!(parse(text).messages, [message], "{text}");
+        }
+    }
+}

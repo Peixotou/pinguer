@@ -41,7 +41,8 @@ impl Parser<'_> {
     }
 
     /// `Statement = LetDecl | VarDecl | ConstDecl | Assignment | ExprStatement
-    /// | … | WhileStatement | ReturnStatement | "break" | "continue" | …`
+    /// | IfStatement | WhileStatement | ReturnStatement | "break" | "continue"
+    /// | …`
     fn stmt(&mut self) -> ast::Stmt {
         let start = self.start();
         let kind = match self.cursor.kind() {
@@ -54,6 +55,7 @@ impl Parser<'_> {
             TokenKind::Keyword(Keyword::Const) => self
                 .binding(ast::BindingKind::Const)
                 .map(ast::StmtKind::Binding),
+            TokenKind::Keyword(Keyword::If) => self.if_stmt(),
             TokenKind::Keyword(Keyword::While) => self.while_stmt(),
             TokenKind::Keyword(Keyword::Return) => self.return_stmt(),
             // Whether they are inside a loop is checked by semantic
@@ -73,6 +75,39 @@ impl Parser<'_> {
             span: self.span_from(start),
             kind: kind.unwrap_or(ast::StmtKind::Error),
         }
+    }
+
+    /// `IfStatement = "if" , Expr , Block , [ "else" , ( IfStatement |
+    /// Block ) ]`
+    ///
+    /// The `else if` branches are collected into one list by a loop
+    /// (ADR-0028), so a long chain neither recurses nor deepens the tree.
+    fn if_stmt(&mut self) -> PResult<ast::StmtKind> {
+        let mut branches = Vec::new();
+        let mut else_block = None;
+        loop {
+            let start = self.start();
+            self.cursor.bump();
+            let cond = self.expr()?;
+            let block = self.block()?;
+            branches.push(ast::IfBranch {
+                span: self.span_from(start),
+                cond,
+                block,
+            });
+            if !self.cursor.at(TokenKind::Keyword(Keyword::Else)) {
+                break;
+            }
+            self.cursor.bump();
+            if !self.cursor.at(TokenKind::Keyword(Keyword::If)) {
+                else_block = Some(self.block()?);
+                break;
+            }
+        }
+        Ok(ast::StmtKind::If(ast::If {
+            branches,
+            else_block,
+        }))
     }
 
     /// `WhileStatement = "while" , Expr , Block`
