@@ -23,6 +23,4 @@ pub enum TypeKind {
     Name(Ident),
     /// The unit type `()`.
     Unit,
-    /// A type that could not be parsed. A diagnostic has been reported.
-    Error,
 }

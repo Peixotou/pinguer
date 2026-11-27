@@ -125,7 +125,6 @@ impl<W: Write> Renderer<'_, W> {
         match &ty.kind {
             TypeKind::Name(name) => self.line(depth, "Type", id, span, &Name(&name.name)),
             TypeKind::Unit => self.line(depth, "Type", id, span, &"()"),
-            TypeKind::Error => self.line(depth, "ErrorType", id, span, &""),
         }
     }
 
@@ -585,7 +584,7 @@ File @1:1-1:81 nodes=29
                     kind: ItemKind::Const(Binding {
                         kind: BindingKind::Const,
                         name: b.ident("café", 3),
-                        ty: Some(Box::new(b.ty(4, 5, TypeKind::Error))),
+                        ty: Some(Box::new(b.ty(4, 5, TypeKind::Unit))),
                         value,
                     }),
                 },
@@ -608,10 +607,7 @@ File @1:1-1:81 nodes=29
             rendered.contains("  Const #3 @1:4-1:10 \"café\"\n"),
             "{rendered}"
         );
-        assert!(
-            rendered.contains("    ErrorType #4 @1:5-1:6\n"),
-            "{rendered}"
-        );
+        assert!(rendered.contains("    Type #4 @1:5-1:6 ()\n"), "{rendered}");
         assert!(
             rendered.contains("    ErrorExpr #0 @1:1-1:4\n"),
             "{rendered}"
