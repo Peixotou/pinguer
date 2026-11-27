@@ -51,6 +51,71 @@ fn tree(text: &str) -> String {
     parsed.tree
 }
 
+/// Returns the structure of `expression`, parsed as the initializer of a
+/// constant, in a compact form: one pair of parentheses per operator chain,
+/// as in `(a - b + (c * d))`, `(- a)` for prefix operators, `(as x int)`,
+/// `(call f x)`, `(. io println)` and `(paren x)`; names and literals as
+/// rendered.
+fn shape(expression: &str) -> String {
+    struct Node {
+        kind: String,
+        data: String,
+        children: Vec<Node>,
+    }
+    fn build(lines: &[(usize, Node)], index: &mut usize) -> Node {
+        let depth = lines[*index].0;
+        let Node { kind, data, .. } = &lines[*index].1;
+        let mut node = Node {
+            kind: kind.clone(),
+            data: data.clone(),
+            children: Vec::new(),
+        };
+        *index += 1;
+        while *index < lines.len() && lines[*index].0 > depth {
+            node.children.push(build(lines, index));
+        }
+        node
+    }
+    fn print(node: &Node) -> String {
+        let children: Vec<String> = node.children.iter().map(print).collect();
+        let joined = children.join(" ");
+        match node.kind.as_str() {
+            "Unary" => format!("({} {joined})", node.data),
+            "Binary" => format!("({joined})"),
+            "Int" => node.data.split(' ').next().unwrap().to_owned(),
+            "Cast" => format!("(as {joined})"),
+            "Call" => format!("(call {joined})"),
+            "Member" => format!("(. {joined} {})", &node.data[1..]),
+            "Paren" => format!("(paren {joined})"),
+            "ErrorExpr" => "error".to_owned(),
+            _ => node.data.clone(),
+        }
+    }
+    let rendered = tree(&format!("const X = {expression}"));
+    let lines: Vec<(usize, Node)> = rendered
+        .lines()
+        .skip(1)
+        .map(|line| {
+            let depth = line.len() - line.trim_start().len();
+            // `Kind [#id] @span [data]`; operator lines have no ID.
+            let mut words = line.trim_start().split(' ').peekable();
+            let kind = words.next().unwrap().to_owned();
+            words.next_if(|word| word.starts_with('#'));
+            words.next_if(|word| word.starts_with('@'));
+            let data = words.collect::<Vec<_>>().join(" ");
+            (
+                depth,
+                Node {
+                    kind,
+                    data,
+                    children: Vec::new(),
+                },
+            )
+        })
+        .collect();
+    print(&build(&lines, &mut 0))
+}
+
 mod file {
     use super::*;
 
@@ -400,5 +465,70 @@ mod unary_expr {
             parse("const X = !\n1").messages,
             ["expected expression, found newline"]
         );
+    }
+}
+
+/// `MulExpr = CastExpr , { ( "*" | "/" | "%" ) , CastExpr }`
+mod mul_expr {
+    use super::*;
+
+    #[test]
+    fn multiplicative_operators_are_left_associative() {
+        assert_eq!(shape("a * b"), "(a * b)");
+        assert_eq!(shape("a / b % c * d"), "(a / b % c * d)");
+    }
+
+    #[test]
+    fn prefix_operators_bind_more_tightly() {
+        assert_eq!(shape("-a * -b"), "((- a) * (- b))");
+    }
+
+    #[test]
+    fn the_right_operand_is_required() {
+        assert_eq!(
+            parse("const X = a *").messages,
+            ["expected expression, found end of file"]
+        );
+        // `a * *b` is two `*` tokens, and `*` is not a prefix operator.
+        assert_eq!(
+            parse("const X = a * *b").messages,
+            ["expected expression, found `*`"]
+        );
+    }
+}
+
+/// `AddExpr = MulExpr , { ( "+" | "-" ) , MulExpr }`
+mod add_expr {
+    use super::*;
+
+    #[test]
+    fn additive_operators_are_left_associative() {
+        assert_eq!(shape("a - b + c"), "(a - b + c)");
+    }
+
+    #[test]
+    fn multiplicative_operators_bind_more_tightly() {
+        assert_eq!(shape("a + b * c"), "(a + (b * c))");
+        assert_eq!(shape("a * b + c"), "((a * b) + c)");
+        assert_eq!(shape("(a + b) * c"), "((paren (a + b)) * c)");
+        assert_eq!(shape("a - -b"), "(a - (- b))");
+    }
+
+    #[test]
+    fn spans_cover_both_operands_and_record_the_operator() {
+        let tree = tree("const X = a +\n    b");
+        assert!(tree.contains("    Binary #1 @1:11-2:6\n"), "{tree}");
+        assert!(tree.contains("      Op @1:13-1:14 +\n"), "{tree}");
+    }
+
+    #[test]
+    fn long_chains_are_one_node() {
+        // A binary tree for this chain would be 100,000 levels deep and
+        // overflow the stack when rendered or dropped.
+        let chain = vec!["a"; 100_000].join(" + ");
+        let parsed = parse(&format!("const X = {chain}"));
+        assert!(parsed.codes.is_empty());
+        assert_eq!(parsed.tree.matches("Binary").count(), 1);
+        assert_eq!(parsed.tree.matches(" Op ").count(), 99_999);
     }
 }
