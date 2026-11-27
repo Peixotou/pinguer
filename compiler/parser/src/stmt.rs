@@ -15,15 +15,7 @@ impl Parser<'_> {
         // reporting a brace on the next line, parse the block as if it were
         // in place, so the rest of the construct is not reported again.
         if self.cursor.at(TokenKind::Newline) && self.cursor.peek(1) == TokenKind::LBrace {
-            self.cursor.bump();
-            let brace = self.cursor.current();
-            self.error(
-                Diagnostic::error("`{` must be on the same line as the code it belongs to")
-                    .with_code(codes::BRACE_ON_NEXT_LINE)
-                    .with_primary(brace.span, "this `{` starts a new line")
-                    .with_note("a line break before `{` ends the declaration or statement")
-                    .with_help("move the `{` to the end of the previous line"),
-            );
+            self.brace_on_next_line();
         }
         let start = self.start();
         if self.cursor.at(TokenKind::LBrace) {
@@ -60,6 +52,24 @@ impl Parser<'_> {
         })
     }
 
+    /// Reports and skips the line break before a `{`.
+    ///
+    /// The diagnostic is built here rather than in [`Parser::block`], which
+    /// recurses: unoptimized builds give every temporary of a function its
+    /// own stack slot, so code that only runs on errors still enlarges
+    /// every recursive frame (ADR-0030).
+    fn brace_on_next_line(&mut self) {
+        self.cursor.bump();
+        let brace = self.cursor.current();
+        self.error(
+            Diagnostic::error("`{` must be on the same line as the code it belongs to")
+                .with_code(codes::BRACE_ON_NEXT_LINE)
+                .with_primary(brace.span, "this `{` starts a new line")
+                .with_note("a line break before `{` ends the declaration or statement")
+                .with_help("move the `{` to the end of the previous line"),
+        );
+    }
+
     /// Skips the rest of a statement after an error (ADR-0029): up to the
     /// next separator at the statement's own nesting level, the `}` that
     /// closes the enclosing block, which is left for the block, or the end
@@ -92,7 +102,26 @@ impl Parser<'_> {
         // An error leaves the constructs that enclose it entered; they are
         // discarded with the statement (ADR-0030).
         let depth = self.depth;
+        // Only blocks, `if` and `while` contain statements; the other kinds
+        // are parsed by `simple_stmt`, so that their temporaries are not in
+        // this recursive frame (see `brace_on_next_line`).
         let kind = match self.cursor.kind() {
+            TokenKind::Keyword(Keyword::If) => self.if_stmt().map(ast::StmtKind::If),
+            TokenKind::LBrace => self.block().map(ast::StmtKind::Block),
+            TokenKind::Keyword(Keyword::While) => self.while_stmt(),
+            _ => self.simple_stmt(),
+        };
+        self.depth = depth;
+        ast::Stmt {
+            id: PENDING,
+            span: self.span_from(start),
+            kind: kind.unwrap_or(ast::StmtKind::Error),
+        }
+    }
+
+    /// The statements that contain no block.
+    fn simple_stmt(&mut self) -> PResult<ast::StmtKind> {
+        match self.cursor.kind() {
             TokenKind::Keyword(Keyword::Let) => self
                 .binding(ast::BindingKind::Let)
                 .map(ast::StmtKind::Binding),
@@ -102,9 +131,6 @@ impl Parser<'_> {
             TokenKind::Keyword(Keyword::Const) => self
                 .binding(ast::BindingKind::Const)
                 .map(ast::StmtKind::Binding),
-            TokenKind::Keyword(Keyword::If) => self.if_stmt(),
-            TokenKind::LBrace => self.block().map(ast::StmtKind::Block),
-            TokenKind::Keyword(Keyword::While) => self.while_stmt(),
             TokenKind::Keyword(Keyword::Return) => self.return_stmt(),
             // Whether they are inside a loop is checked by semantic
             // analysis.
@@ -124,12 +150,6 @@ impl Parser<'_> {
                 "a `}` missing earlier in the file also puts a declaration inside a block",
             )),
             _ => self.expr_stmt(),
-        };
-        self.depth = depth;
-        ast::Stmt {
-            id: PENDING,
-            span: self.span_from(start),
-            kind: kind.unwrap_or(ast::StmtKind::Error),
         }
     }
 
@@ -138,7 +158,7 @@ impl Parser<'_> {
     ///
     /// The `else if` branches are collected into one list by a loop
     /// (ADR-0028), so a long chain neither recurses nor deepens the tree.
-    fn if_stmt(&mut self) -> PResult<ast::StmtKind> {
+    fn if_stmt(&mut self) -> PResult<ast::If> {
         let mut branches = Vec::new();
         let mut else_block = None;
         loop {
@@ -161,10 +181,10 @@ impl Parser<'_> {
                 break;
             }
         }
-        Ok(ast::StmtKind::If(ast::If {
+        Ok(ast::If {
             branches,
             else_block,
-        }))
+        })
     }
 
     /// Layout rule: `else` is on the same line as the `}` before it.

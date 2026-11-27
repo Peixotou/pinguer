@@ -36,8 +36,13 @@ data model must be usable by later phases without the parser.
   left-associative chains are iterative, so `a + b + … + z` does not recurse.
   Comparisons are parsed once per level and a second comparison operator is
   reported, which implements their non-associativity. `as` binds at its own
-  level and takes a type, not an expression. Prefix operators recurse;
-  calls and member accesses are parsed by a postfix loop.
+  level and takes a type, not an expression. The operand of a binary
+  operator (`CastExpr`, `UnaryExpr` and `PostfixExpr`) is parsed by loops in
+  one function: prefix operators are collected and applied after the
+  postfix expression, and calls, member accesses and conversions are
+  loops. Parentheses and call arguments are the only recursion within an
+  expression, which keeps the stack used per level of nesting small
+  ([ADR-0030](0030-parser-resource-limits.md)).
 * **Newline filtering before parsing.** A linear pass over the tokens removes
   every `NEWLINE` that the grammar ignores: one that directly follows a
   binary operator, an assignment operator, `as`, `->` or `,`, and one that
