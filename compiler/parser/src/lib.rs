@@ -66,9 +66,12 @@ fn parse_with_id_capacity(
         last_error: None,
     };
     let mut tree = parser.file(Span::new(file, 0, text_len));
+    // The tree holds everything later stages need from the tokens: free
+    // them before numbering.
+    drop(parser.cursor);
     if ids::number(&mut tree, id_capacity).is_err() {
         // ADR-0030: stop instead of reusing or wrapping IDs.
-        parser.error(
+        parser.diagnostics.push(
             Diagnostic::error("the file has too many syntax tree nodes")
                 .with_code(codes::TOO_MANY_NODES)
                 .with_note(format!(
