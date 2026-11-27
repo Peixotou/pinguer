@@ -1231,3 +1231,31 @@ mod if_statement {
         }
     }
 }
+
+/// `Statement = … | Block`
+mod block_statement {
+    use super::*;
+
+    #[test]
+    fn blocks_nest_as_statements() {
+        let expected = concat!(
+            "      BlockStmt #2 @1:12-1:23\n",
+            "        Block #3 @1:12-1:23\n",
+            "          BlockStmt #4 @1:14-1:21\n",
+            "            Block #5 @1:14-1:21\n",
+            "              ExprStmt #6 @1:16-1:19\n",
+        );
+        let body = tree("func f() { { { g() } } }");
+        assert!(body.contains(expected), "{body}");
+    }
+
+    #[test]
+    fn an_unclosed_inner_block_is_reported_at_its_brace() {
+        let parsed = parse("func f() {\n    {\n        g()\n}");
+        assert_eq!(parsed.codes, ["P2008"]);
+        assert_eq!(
+            parsed.messages,
+            ["expected `}` to close `{`, found end of file"]
+        );
+    }
+}

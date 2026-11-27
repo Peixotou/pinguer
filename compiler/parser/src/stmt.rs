@@ -24,7 +24,9 @@ impl Parser<'_> {
             if failed {
                 return Err(crate::Reported);
             }
-            if self.cursor.at(TokenKind::RBrace) {
+            // The end of the file is left for `expect_closing`, which
+            // reports the unclosed `{`.
+            if self.cursor.at(TokenKind::RBrace) || self.cursor.at(TokenKind::Eof) {
                 break;
             }
             if !self.at_separator() {
@@ -42,7 +44,7 @@ impl Parser<'_> {
 
     /// `Statement = LetDecl | VarDecl | ConstDecl | Assignment | ExprStatement
     /// | IfStatement | WhileStatement | ReturnStatement | "break" | "continue"
-    /// | …`
+    /// | Block`
     fn stmt(&mut self) -> ast::Stmt {
         let start = self.start();
         let kind = match self.cursor.kind() {
@@ -56,6 +58,7 @@ impl Parser<'_> {
                 .binding(ast::BindingKind::Const)
                 .map(ast::StmtKind::Binding),
             TokenKind::Keyword(Keyword::If) => self.if_stmt(),
+            TokenKind::LBrace => self.block().map(ast::StmtKind::Block),
             TokenKind::Keyword(Keyword::While) => self.while_stmt(),
             TokenKind::Keyword(Keyword::Return) => self.return_stmt(),
             // Whether they are inside a loop is checked by semantic
