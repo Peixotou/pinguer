@@ -10,7 +10,28 @@ use crate::{PResult, Parser, literal};
 impl Parser<'_> {
     /// `Expr = OrExpr`
     pub(crate) fn expr(&mut self) -> PResult<ast::Expr> {
-        self.primary()
+        self.unary()
+    }
+
+    /// `UnaryExpr = ( "-" | "!" | "~" ) , UnaryExpr | PostfixExpr`
+    fn unary(&mut self) -> PResult<ast::Expr> {
+        let op = match self.cursor.kind() {
+            TokenKind::Minus => ast::UnaryOp::Neg,
+            TokenKind::Bang => ast::UnaryOp::Not,
+            TokenKind::Tilde => ast::UnaryOp::BitNot,
+            _ => return self.primary(),
+        };
+        let start = self.start();
+        self.cursor.bump();
+        let operand = self.unary()?;
+        Ok(ast::Expr {
+            id: PENDING,
+            span: self.span_from(start),
+            kind: ast::ExprKind::Unary {
+                op,
+                operand: Box::new(operand),
+            },
+        })
     }
 
     /// `PrimaryExpr = INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | CHAR_LITERAL

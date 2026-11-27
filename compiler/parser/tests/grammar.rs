@@ -360,3 +360,45 @@ mod primary_expr {
         }
     }
 }
+
+/// `UnaryExpr = ( "-" | "!" | "~" ) , UnaryExpr | PostfixExpr`
+mod unary_expr {
+    use super::primary_expr::value;
+    use super::*;
+
+    #[test]
+    fn prefix_operators_nest() {
+        let expected = concat!(
+            "    Unary #1 @1:11-1:15 -\n",
+            "      Unary #2 @1:12-1:15 !\n",
+            "        Unary #3 @1:13-1:15 ~\n",
+            "          Name #4 @1:14-1:15 x\n",
+        );
+        assert_eq!(value("-!~x"), expected);
+        // `--x` is two prefix operators: there is no decrement operator.
+        assert_eq!(value("--x").matches("Unary").count(), 2);
+    }
+
+    #[test]
+    fn a_negative_literal_is_negation_of_a_literal() {
+        let expected = concat!(
+            "    Unary #1 @1:11-1:15 -\n",
+            "      Int #2 @1:12-1:15 128 decimal\n",
+        );
+        assert_eq!(value("-128"), expected);
+    }
+
+    #[test]
+    fn a_prefix_operator_needs_an_operand() {
+        assert_eq!(
+            parse("const X = -").messages,
+            ["expected expression, found end of file"]
+        );
+        // A line break after `-` continues the line; after `!` it does not.
+        assert_eq!(value("-\n1").matches("Unary").count(), 1);
+        assert_eq!(
+            parse("const X = !\n1").messages,
+            ["expected expression, found newline"]
+        );
+    }
+}
