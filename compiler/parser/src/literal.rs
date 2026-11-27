@@ -64,6 +64,61 @@ pub(crate) fn decode_float(text: &str) -> Option<Box<str>> {
     Some(text.replace('_', "").into_boxed_str())
 }
 
+/// Decodes a string literal, quotes included, into its value with escape
+/// sequences resolved.
+///
+/// Characters that the lexer rejects anywhere in a file (LEXICAL_STRUCTURE.md
+/// §3) are not checked again: the lexer has reported them, and they do not
+/// change the structure of the literal.
+pub(crate) fn decode_string(text: &str) -> Option<Box<str>> {
+    let mut chars = text.strip_prefix('"')?.chars();
+    let mut value = String::with_capacity(text.len());
+    loop {
+        match chars.next()? {
+            '"' => return chars.as_str().is_empty().then(|| value.into_boxed_str()),
+            '\\' => value.push(escape(&mut chars)?),
+            c => value.push(c),
+        }
+    }
+}
+
+/// Decodes the escape sequence after a `\`: `\n \r \t \\ \0 \" \'` or
+/// `\u{X}` with one to six hexadecimal digits naming a Unicode scalar value.
+fn escape(chars: &mut std::str::Chars<'_>) -> Option<char> {
+    Some(match chars.next()? {
+        'n' => '\n',
+        'r' => '\r',
+        't' => '\t',
+        '\\' => '\\',
+        '0' => '\0',
+        '"' => '"',
+        '\'' => '\'',
+        'u' => {
+            if chars.next()? != '{' {
+                return None;
+            }
+            let mut value = 0u32;
+            let mut digits = 0;
+            loop {
+                let c = chars.next()?;
+                if c == '}' {
+                    break;
+                }
+                digits += 1;
+                if digits > 6 {
+                    return None;
+                }
+                value = value * 16 + c.to_digit(16)?;
+            }
+            if digits == 0 {
+                return None;
+            }
+            char::from_u32(value)?
+        }
+        _ => return None,
+    })
+}
+
 /// Decodes `digit , { [ "_" ] , digit }` in `radix`. Returns `None` if
 /// `text` does not have that form, and `Some(None)` if the value does not
 /// fit in a `u128`.
@@ -159,6 +214,39 @@ mod tests {
             "1e5e", "1.5.2", "0x1.5",
         ] {
             assert_eq!(decode_float(text), None, "{text}");
+        }
+    }
+
+    #[test]
+    fn strings_resolve_every_escape() {
+        let text = r#""a\n\r\t\\\0\"\'\u{41}\u{1F427}\u{10FFFF}é""#;
+        assert_eq!(
+            decode_string(text).as_deref(),
+            Some("a\n\r\t\\\0\"'A🐧\u{10FFFF}é")
+        );
+        assert_eq!(decode_string(r#""""#).as_deref(), Some(""));
+        // A quote that is not escaped ends the literal, so `'` is ordinary.
+        assert_eq!(decode_string(r#""it's""#).as_deref(), Some("it's"));
+    }
+
+    #[test]
+    fn malformed_strings_do_not_decode() {
+        for text in [
+            r#"""#,
+            r#""abc"#,
+            r#""abc\""#,
+            r#""\q""#,
+            r#""\u41""#,
+            r#""\u{}""#,
+            r#""\u{1234567}""#,
+            r#""\u{D800}""#,
+            r#""\u{110000}""#,
+            r#""\u{12G4}""#,
+            r#""\u{41""#,
+            r#""a"b""#,
+            "abc",
+        ] {
+            assert_eq!(decode_string(text), None, "{text}");
         }
     }
 

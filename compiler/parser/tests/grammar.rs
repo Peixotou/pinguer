@@ -261,6 +261,22 @@ mod primary_expr {
     }
 
     #[test]
+    fn string_literals_are_decoded() {
+        assert_eq!(
+            value(r#""tab\t\u{1F427}""#),
+            "    String #1 @1:11-1:27 \"tab\\t🐧\"\n"
+        );
+        // The rendering escapes control characters produced by escapes.
+        assert!(value(r#""\u{1B}[2J""#).contains(r#""\u{1b}[2J""#));
+        for text in [r#""\q""#, r#""open"#] {
+            let parsed = parse(&format!("const X = {text}"));
+            assert_eq!(parsed.codes.len(), 1, "{text}: {:?}", parsed.messages);
+            assert!(parsed.codes[0].starts_with("P100"), "{text}");
+            assert!(parsed.tree.contains("    ErrorExpr #1"), "{text}");
+        }
+    }
+
+    #[test]
     fn malformed_integer_literals_are_reported_once_by_the_lexer() {
         for (text, code) in [
             ("0b12", "P1006"),
