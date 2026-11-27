@@ -41,7 +41,7 @@ impl Parser<'_> {
     }
 
     /// `Statement = LetDecl | VarDecl | ConstDecl | Assignment | ExprStatement
-    /// | … | ReturnStatement | "break" | "continue" | …`
+    /// | … | WhileStatement | ReturnStatement | "break" | "continue" | …`
     fn stmt(&mut self) -> ast::Stmt {
         let start = self.start();
         let kind = match self.cursor.kind() {
@@ -54,6 +54,7 @@ impl Parser<'_> {
             TokenKind::Keyword(Keyword::Const) => self
                 .binding(ast::BindingKind::Const)
                 .map(ast::StmtKind::Binding),
+            TokenKind::Keyword(Keyword::While) => self.while_stmt(),
             TokenKind::Keyword(Keyword::Return) => self.return_stmt(),
             // Whether they are inside a loop is checked by semantic
             // analysis.
@@ -72,6 +73,14 @@ impl Parser<'_> {
             span: self.span_from(start),
             kind: kind.unwrap_or(ast::StmtKind::Error),
         }
+    }
+
+    /// `WhileStatement = "while" , Expr , Block`
+    fn while_stmt(&mut self) -> PResult<ast::StmtKind> {
+        self.cursor.bump();
+        let cond = self.expr()?;
+        let body = self.block()?;
+        Ok(ast::StmtKind::While { cond, body })
     }
 
     /// `ReturnStatement = "return" , [ Expr ]`, without a value when a

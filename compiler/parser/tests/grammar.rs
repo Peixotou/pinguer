@@ -1131,3 +1131,38 @@ mod loop_control {
         assert_eq!(parse("func f() { break x }").codes, ["P2003"]);
     }
 }
+
+/// `WhileStatement = "while" , Expr , Block`
+mod while_statement {
+    use super::*;
+
+    #[test]
+    fn a_condition_and_a_body() {
+        let expected = concat!(
+            "      While #2 @2:5-4:6\n",
+            "        Binary #3 @2:11-2:17\n",
+            "          Name #4 @2:11-2:12 i\n",
+            "          Op @2:13-2:14 <\n",
+            "          Int #5 @2:15-2:17 10 decimal\n",
+            "        Block #6 @2:18-4:6\n",
+            "          Assign #7 @3:9-3:15 i +=\n",
+            "            Int #8 @3:14-3:15 1 decimal\n",
+        );
+        let body = tree("func f() {\n    while i < 10 {\n        i += 1\n    }\n}");
+        assert!(body.contains(expected), "{body}");
+    }
+
+    #[test]
+    fn needs_a_condition_and_a_block() {
+        for (text, message) in [
+            ("func f() { while {} }", "expected expression, found `{`"),
+            ("func f() { while x }", "expected `{`, found `}`"),
+            (
+                "func f() { while x y }",
+                "expected `{`, found identifier `y`",
+            ),
+        ] {
+            assert_eq!(parse(text).messages, [message], "{text}");
+        }
+    }
+}
