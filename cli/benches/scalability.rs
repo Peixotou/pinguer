@@ -7,6 +7,10 @@
 //! * `load`: `SourceMap::load`, which reads, validates UTF-8 and indexes;
 //! * `index`: `SourceMap::add` on text already in memory (line index only);
 //! * `lex`: `tokenize` with the CLI's diagnostic limit;
+//! * `parse`: `pinguer_parser::parse` on tokens already produced, including
+//!   its line-break filter and node numbering;
+//! * `tree`: rendering the syntax tree, as `debug ast` does, into a sink;
+//! * `drop`: dropping the syntax tree;
 //! * `positions`: converting the start of every token to a line and column;
 //! * `render`: rendering the reported diagnostics in both formats;
 //! * `listing`: formatting the `debug tokens` listing into a sink.
@@ -25,6 +29,7 @@ use std::time::{Duration, Instant};
 
 use pinguer_diagnostics::{Diagnostics, human, json};
 use pinguer_lexer::tokenize;
+use pinguer_parser::parse;
 use pinguer_source::SourceMap;
 
 /// The same limit as the CLI.
@@ -34,27 +39,42 @@ const SIZES: [usize; 8] = [
     10_000, 20_000, 160_000, 320_000, 640_000, 1_000_000, 5_000_000, 10_000_000,
 ];
 
-/// Input shapes: a unit repeated up to the requested size.
-const SHAPES: [(&str, &str); 5] = [
-    ("long_valid_line", "let x = y + 1 "),
-    ("long_invalid_line", "$"),
-    ("many_valid_lines", "let x = y + 1\n"),
-    ("many_invalid_lines", "$\n"),
-    ("unicode_tabs_line", "\"é🐧ção\"\t"),
+/// Input shapes: a prefix, then a unit repeated up to the requested size.
+/// The first five were chosen for the lexer; at the top level, `let` is a
+/// misplaced declaration, so the parser recovers on every line of
+/// `many_valid_lines`. The last three are valid programs, or nearly: the
+/// body of `many_statements` is not closed.
+const SHAPES: [(&str, &str, &str); 8] = [
+    ("long_valid_line", "", "let x = y + 1 "),
+    ("long_invalid_line", "", "$"),
+    ("many_valid_lines", "", "let x = y + 1\n"),
+    ("many_invalid_lines", "", "$\n"),
+    ("unicode_tabs_line", "", "\"é🐧ção\"\t"),
+    ("long_expression", "const X = 0", " + x * 2"),
+    ("many_statements", "func f() {\n", "    g(x, y + 1)\n"),
+    (
+        "many_functions",
+        "",
+        "func f(a: int) -> int {\n    return a * 2 + 1\n}\n",
+    ),
 ];
 
-const PHASES: [&str; 7] = [
+const PHASES: [&str; 10] = [
     "read",
     "load",
     "index",
     "lex",
+    "parse",
+    "tree",
+    "drop",
     "positions",
     "render",
     "listing",
 ];
 
-fn input(unit: &str, size: usize) -> String {
-    let mut text = unit.repeat(size / unit.len() + 1);
+fn input(prefix: &str, unit: &str, size: usize) -> String {
+    let mut text = prefix.to_owned();
+    text.push_str(&unit.repeat(size / unit.len() + 1));
     let mut end = size;
     while !text.is_char_boundary(end) {
         end -= 1;
@@ -77,16 +97,46 @@ fn fastest<T>(runs: usize, mut f: impl FnMut() -> T) -> (Duration, T) {
     (best, result.expect("at least one run"))
 }
 
+/// Counts what is written to it and discards it.
+struct Sink(usize);
+
+impl std::fmt::Write for Sink {
+    fn write_str(&mut self, text: &str) -> std::fmt::Result {
+        self.0 += text.len();
+        Ok(())
+    }
+}
+
+/// Runs `f` on a fresh value from `setup` `runs` times, timing only `f`,
+/// and returns the fastest duration and the last result.
+fn fastest_with<S, T>(
+    runs: usize,
+    mut setup: impl FnMut() -> S,
+    mut f: impl FnMut(S) -> T,
+) -> (Duration, T) {
+    let mut best = Duration::MAX;
+    let mut result = None;
+    for _ in 0..runs {
+        let input = setup();
+        let start = Instant::now();
+        let value = f(input);
+        best = best.min(start.elapsed());
+        result = Some(value);
+    }
+    (best, result.expect("at least one run"))
+}
+
 struct Measurement {
     size: usize,
-    phases: [Duration; 7],
+    phases: [Duration; 10],
     tokens: usize,
+    nodes: u32,
     errors: usize,
     rendered_bytes: usize,
 }
 
-fn measure(unit: &str, size: usize, path: &std::path::Path) -> Measurement {
-    let text = input(unit, size);
+fn measure(prefix: &str, unit: &str, size: usize, path: &std::path::Path) -> Measurement {
+    let text = input(prefix, unit, size);
     std::fs::write(path, &text).expect("cannot write the input file");
     let runs = if size <= 1_000_000 { 5 } else { 3 };
 
@@ -107,6 +157,31 @@ fn measure(unit: &str, size: usize, path: &std::path::Path) -> Measurement {
         let tokens = tokenize(file, source.text(), &mut diagnostics);
         (tokens, diagnostics)
     });
+    // Parsing consumes the tokens, so each run gets a copy, made outside the
+    // timed part. Parse diagnostics go to a collection of their own, so that
+    // the lexer's are rendered alone below as before.
+    let (parse_time, tree) = fastest_with(
+        runs,
+        || (tokens.clone(), Diagnostics::with_limit(DIAGNOSTIC_LIMIT)),
+        |(tokens, mut parse_diagnostics)| {
+            parse(file, source.text(), tokens, &mut parse_diagnostics)
+        },
+    );
+    let (tree_time, _) = fastest(runs, || {
+        let mut sink = Sink(0);
+        pinguer_ast::render(&mut sink, &tree, source).expect("the sink accepts everything");
+        sink.0
+    });
+    let nodes = tree.node_count;
+    drop(tree);
+    let (drop_time, ()) = fastest_with(
+        runs,
+        || {
+            let mut parse_diagnostics = Diagnostics::with_limit(DIAGNOSTIC_LIMIT);
+            parse(file, source.text(), tokens.clone(), &mut parse_diagnostics)
+        },
+        drop,
+    );
     let (positions, _) = fastest(runs, || {
         tokens
             .iter()
@@ -133,8 +208,11 @@ fn measure(unit: &str, size: usize, path: &std::path::Path) -> Measurement {
 
     Measurement {
         size,
-        phases: [read, load, index, lex, positions, render, listing],
+        phases: [
+            read, load, index, lex, parse_time, tree_time, drop_time, positions, render, listing,
+        ],
         tokens: tokens.len(),
+        nodes,
         errors: diagnostics.error_count(),
         rendered_bytes,
     }
@@ -146,7 +224,7 @@ fn milliseconds(duration: Duration) -> f64 {
 
 fn main() {
     let path = std::env::temp_dir().join(format!("pinguer-scalability-{}.pgr", std::process::id()));
-    for (shape, unit) in SHAPES {
+    for (shape, prefix, unit) in SHAPES {
         println!("\n{shape}");
         let mut header = format!("{:>10}", "bytes");
         for phase in PHASES {
@@ -154,21 +232,21 @@ fn main() {
         }
         let _ = write!(
             header,
-            " {:>10} {:>10} {:>10}",
-            "tokens", "errors", "rendered"
+            " {:>10} {:>10} {:>10} {:>10}",
+            "tokens", "nodes", "errors", "rendered"
         );
         println!("{header}");
         let mut results = Vec::new();
         for size in SIZES {
-            let m = measure(unit, size, &path);
+            let m = measure(prefix, unit, size, &path);
             let mut row = format!("{:>10}", m.size);
             for phase in m.phases {
                 let _ = write!(row, " {:>10.3}", milliseconds(phase));
             }
             let _ = write!(
                 row,
-                " {:>10} {:>10} {:>10}",
-                m.tokens, m.errors, m.rendered_bytes
+                " {:>10} {:>10} {:>10} {:>10}",
+                m.tokens, m.nodes, m.errors, m.rendered_bytes
             );
             println!("{row}");
             results.push(m);
