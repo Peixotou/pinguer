@@ -1953,14 +1953,17 @@ mod generic_syntax {
             "{:?}",
             parsed.notes
         );
-        let parsed = parse("const X = a < b < c");
-        assert!(
-            parsed.notes[0]
-                .iter()
-                .all(|note| !note.contains("type arguments")),
-            "{:?}",
-            parsed.notes
-        );
+        for text in ["const X = a < b < c", "const X = a < c > d"] {
+            let parsed = parse(text);
+            assert_eq!(parsed.codes, ["P2009"], "{text}");
+            assert!(
+                parsed.notes[0]
+                    .iter()
+                    .all(|note| !note.contains("type arguments")),
+                "{text}: {:?}",
+                parsed.notes
+            );
+        }
     }
 }
 

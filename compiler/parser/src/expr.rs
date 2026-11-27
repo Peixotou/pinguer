@@ -112,8 +112,12 @@ impl Parser<'_> {
                  `a < b && b < c`, so write each comparison separately",
             );
         // `f<int>(x)` reads as two comparisons; explicit type arguments are
-        // unresolved in GENERICS.md, so the syntax is parsed as written.
-        if previous.op == ast::BinaryOp::Lt && second.kind == TokenKind::Gt {
+        // unresolved in GENERICS.md, so the syntax is parsed as written. The
+        // note is added only where the `>` is followed by `(`, as in a call.
+        if previous.op == ast::BinaryOp::Lt
+            && second.kind == TokenKind::Gt
+            && self.cursor.peek(1) == TokenKind::LParen
+        {
             diagnostic = diagnostic.with_note(
                 "explicit type arguments such as `f<T>(x)` are not supported in Pinguer v0.1",
             );
