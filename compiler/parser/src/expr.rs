@@ -122,19 +122,34 @@ impl Parser<'_> {
     fn postfix(&mut self) -> PResult<ast::Expr> {
         let start = self.start();
         let mut expr = self.primary()?;
-        while self.cursor.at(TokenKind::LParen) {
-            let open = self.cursor.bump();
-            let args = self.args(open)?;
+        loop {
+            let kind = match self.cursor.kind() {
+                TokenKind::LParen => {
+                    let open = self.cursor.bump();
+                    let args = self.args(open)?;
+                    ast::ExprKind::Call {
+                        callee: Box::new(expr),
+                        args,
+                    }
+                }
+                // `MemberSuffix = "." , IDENT`. Whether the base is a
+                // module, as v0.1 requires, is checked by name resolution.
+                TokenKind::Dot => {
+                    self.cursor.bump();
+                    let name = self.ident()?;
+                    ast::ExprKind::Member {
+                        base: Box::new(expr),
+                        name,
+                    }
+                }
+                _ => return Ok(expr),
+            };
             expr = ast::Expr {
                 id: PENDING,
                 span: self.span_from(start),
-                kind: ast::ExprKind::Call {
-                    callee: Box::new(expr),
-                    args,
-                },
+                kind,
             };
         }
-        Ok(expr)
     }
 
     /// The rest of `CallSuffix = "(" , [ ArgList ] , ")"` after `open`, with

@@ -745,3 +745,40 @@ mod call_suffix {
         }
     }
 }
+
+/// `MemberSuffix = "." , IDENT`
+mod member_suffix {
+    use super::*;
+
+    #[test]
+    fn member_accesses_chain_with_calls() {
+        assert_eq!(shape("io.println"), "(. io println)");
+        assert_eq!(shape("a.b.c"), "(. (. a b) c)");
+        assert_eq!(shape("io.println(\"hi\")"), "(call (. io println) \"hi\")");
+        assert_eq!(shape("f().x"), "(. (call f) x)");
+        // Syntactically any expression has members; `1.x` is not a float.
+        assert_eq!(shape("1.x"), "(. 1 x)");
+    }
+
+    #[test]
+    fn lines_starting_with_a_dot_continue_the_expression() {
+        assert_eq!(shape("io\n    .println"), "(. io println)");
+        assert_eq!(shape("a\n\n// comment\n.b"), "(. a b)");
+        // Only `.` continues a line: `(x)` on the next line is not a call.
+        assert_eq!(parse("const X = io\n.println\n(x)").labelled, ["("]);
+    }
+
+    #[test]
+    fn the_member_name_is_an_identifier() {
+        for (text, message) in [
+            ("const X = a.", "expected identifier, found end of file"),
+            (
+                "const X = a.1",
+                "expected identifier, found integer literal",
+            ),
+            ("const X = a.(b)", "expected identifier, found `(`"),
+        ] {
+            assert_eq!(parse(text).messages, [message], "{text}");
+        }
+    }
+}
