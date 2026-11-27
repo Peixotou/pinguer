@@ -1075,3 +1075,41 @@ mod assignment {
         assert_eq!(parse("func f() { x **= 2 }").codes, ["P2010"]);
     }
 }
+
+/// `ReturnStatement = "return" , [ Expr ]`
+mod return_statement {
+    use super::*;
+
+    #[test]
+    fn returns_a_value() {
+        let body = tree("func f() -> int { return a + 1 }");
+        assert!(
+            body.contains("      Return #3 @1:19-1:31\n        Binary #4"),
+            "{body}"
+        );
+    }
+
+    #[test]
+    fn returns_nothing_before_a_separator_brace_or_end() {
+        for text in [
+            "func f() { return }",
+            "func f() { return; g() }",
+            "func f() {\n    return\n}",
+        ] {
+            let body = tree(text);
+            let line = body.lines().find(|line| line.contains("Return")).unwrap();
+            let next = body.lines().skip_while(|l| !l.contains("Return")).nth(1);
+            assert!(
+                next.is_none_or(|next| !next.starts_with("        ")),
+                "{text}: {line}\n{body}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_value_on_the_next_line_is_a_separate_statement() {
+        let body = tree("func f() {\n    return\n    g()\n}");
+        assert_eq!(body.matches("Return").count(), 1);
+        assert!(body.contains("      ExprStmt #3 @3:5-3:8\n"), "{body}");
+    }
+}

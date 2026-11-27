@@ -40,7 +40,8 @@ impl Parser<'_> {
         })
     }
 
-    /// `Statement = LetDecl | VarDecl | ConstDecl | … | ExprStatement | …`
+    /// `Statement = LetDecl | VarDecl | ConstDecl | Assignment | ExprStatement
+    /// | … | ReturnStatement | …`
     fn stmt(&mut self) -> ast::Stmt {
         let start = self.start();
         let binding = match self.cursor.kind() {
@@ -51,6 +52,7 @@ impl Parser<'_> {
         };
         let kind = match binding {
             Some(kind) => self.binding(kind).map(ast::StmtKind::Binding),
+            None if self.cursor.at(TokenKind::Keyword(Keyword::Return)) => self.return_stmt(),
             None => self.expr_stmt(),
         };
         ast::Stmt {
@@ -58,6 +60,19 @@ impl Parser<'_> {
             span: self.span_from(start),
             kind: kind.unwrap_or(ast::StmtKind::Error),
         }
+    }
+
+    /// `ReturnStatement = "return" , [ Expr ]`, without a value when a
+    /// separator, the closing `}` or the end of the file follows.
+    fn return_stmt(&mut self) -> PResult<ast::StmtKind> {
+        self.cursor.bump();
+        if self.at_separator()
+            || self.cursor.at(TokenKind::RBrace)
+            || self.cursor.at(TokenKind::Eof)
+        {
+            return Ok(ast::StmtKind::Return(None));
+        }
+        Ok(ast::StmtKind::Return(Some(self.expr()?)))
     }
 
     /// `ExprStatement = PostfixExpr`
