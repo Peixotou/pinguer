@@ -1840,6 +1840,19 @@ mod one_diagnostic_per_problem {
     }
 
     #[test]
+    fn grouped_delimiters_keep_their_place_among_other_diagnostics() {
+        let text = "func f() {\n    g((a\n}\nconst = 1\nfunc h() {\n    k(\n";
+        let reported = diagnostics(text);
+        let codes: Vec<String> = reported
+            .iter()
+            .map(|d| d.code.unwrap().to_string())
+            .collect();
+        assert_eq!(codes, ["P2008", "P2002", "P2008"]);
+        assert_eq!(reported[0].notes, ["2 delimiters are not closed"]);
+        assert_eq!(reported[2].notes, ["2 delimiters are not closed"]);
+    }
+
+    #[test]
     fn unclosed_delimiters_at_different_tokens_are_reported_separately() {
         let reported = diagnostics("func f() {\n    g(a\n}\nfunc h() {\n    k(b\n}");
         assert_eq!(reported.len(), 2);
