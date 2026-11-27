@@ -19,6 +19,11 @@ risks never terminating on unexpected input.
 * One problem, one diagnostic. After reporting an error in a statement or
   item, the parser does not report further errors until it has
   resynchronized.
+* Two parser diagnostics never blame the same token, with one exception:
+  unclosed delimiters, each of which names a different opening delimiter.
+  A second diagnostic at the token of the previous one is a consequence of
+  it (for example a `while` without its block after a `)` missing before
+  `}`) and is dropped.
 * `Unknown` tokens were reported by the lexer
   ([LEXICAL_STRUCTURE.md §7](../../specifications/LEXICAL_STRUCTURE.md#7-error-recovery))
   and are skipped without a diagnostic.
@@ -43,7 +48,9 @@ risks never terminating on unexpected input.
 * **Missing tokens.** When a token is missing but the construct can be
   completed (for example a `)` missing at the end of an argument list), the
   parser reports it and continues as if it had been there, instead of
-  discarding what follows.
+  discarding what follows. This applies where only the delimiter can
+  complete the construct: at a `}`, which is left for the block it closes,
+  and at the end of the file, including directly after `(` or `,`.
 
 ### Progress
 

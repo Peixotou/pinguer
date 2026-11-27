@@ -129,10 +129,17 @@ impl Parser<'_> {
             // `primary`, which does not recurse.
             self.enter()?;
             let open = self.cursor.bump();
-            let inner = self.binary(0)?;
-            self.expect_closing(open, TokenKind::RParen)?;
+            let kind = if at_block_end_or_eof(self.cursor.kind()) {
+                // Nothing can complete the expression but the `)`.
+                self.expect_closing(open, TokenKind::RParen)?;
+                ast::ExprKind::Error
+            } else {
+                let inner = self.binary(0)?;
+                self.expect_closing(open, TokenKind::RParen)?;
+                ast::ExprKind::Paren(Box::new(inner))
+            };
             self.leave();
-            self.node(postfix_start, ast::ExprKind::Paren(Box::new(inner)))
+            self.node(postfix_start, kind)
         } else {
             self.primary()?
         };
@@ -236,7 +243,8 @@ impl Parser<'_> {
     /// `ArgList = Expr , { "," , Expr } , [ "," ]`.
     fn args(&mut self, open: Token) -> PResult<Vec<ast::Expr>> {
         let mut args = Vec::new();
-        while !self.cursor.at(TokenKind::RParen) {
+        // Before a `}` or the end of the file, only the `)` is missing.
+        while !self.cursor.at(TokenKind::RParen) && !at_block_end_or_eof(self.cursor.kind()) {
             args.push(self.binary(0)?);
             if !self.cursor.at(TokenKind::Comma) {
                 break;
@@ -330,6 +338,12 @@ mod precedence {
     pub(super) const SHIFT: u8 = 8;
     pub(super) const ADDITIVE: u8 = 9;
     pub(super) const MULTIPLICATIVE: u8 = 10;
+}
+
+/// Returns `true` at a `}` or the end of the file, where an unclosed `(`
+/// is reported as such (ADR-0029) rather than as a missing expression.
+fn at_block_end_or_eof(kind: TokenKind) -> bool {
+    matches!(kind, TokenKind::RBrace | TokenKind::Eof)
 }
 
 /// Returns the prefix operator a token spells.

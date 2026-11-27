@@ -63,6 +63,7 @@ fn parse_with_id_capacity(
         diagnostics,
         depth: 0,
         deepest: 0,
+        last_error: None,
     };
     let mut tree = parser.file(Span::new(file, 0, text_len));
     if ids::number(&mut tree, id_capacity).is_err() {
@@ -99,6 +100,9 @@ struct Parser<'a> {
     /// The deepest level reached in the chain being measured; see
     /// [`Parser::open_chain`].
     deepest: u32,
+    /// The primary span of the last reported diagnostic, and whether that
+    /// diagnostic reported an unclosed delimiter; see [`Parser::error`].
+    last_error: Option<(Span, bool)>,
 }
 
 impl Parser<'_> {
@@ -253,28 +257,40 @@ impl Parser<'_> {
     ///   expression or appear anywhere else in v0.1; the dedicated
     ///   diagnostic that LEXICAL_STRUCTURE.md §5.2 requires replaces the one
     ///   about what was expected.
+    ///
+    /// A diagnostic that blames the same span as the previous one is not
+    /// reported either: it is a consequence of the first, as when the
+    /// construct completed at a `}` (see [`Parser::expect_closing`]) still
+    /// lacks something there. Unclosed delimiters are the exception, since
+    /// each one reports a different opening delimiter.
     fn error(&mut self, diagnostic: Diagnostic) -> Reported {
         let current = self.cursor.current();
-        let blames_current = diagnostic
-            .main_label()
-            .is_some_and(|label| label.span == current.span);
-        match current.kind {
-            TokenKind::Unknown if blames_current => {}
+        let primary = diagnostic.main_label().map(|label| label.span);
+        let blames_current = primary == Some(current.span);
+        let diagnostic = match current.kind {
+            TokenKind::Unknown if blames_current => return Reported,
             TokenKind::Keyword(keyword)
                 if blames_current && keyword.is_reserved_for_future_use() =>
             {
-                self.diagnostics.push(
-                    Diagnostic::error(format!(
-                        "`{}` is reserved for a future version of Pinguer",
-                        keyword.as_str()
-                    ))
-                    .with_code(codes::RESERVED_KEYWORD)
-                    .with_primary(current.span, "reserved keyword")
-                    .with_note("it has no meaning in Pinguer v0.1 and cannot be used as a name"),
-                );
+                Diagnostic::error(format!(
+                    "`{}` is reserved for a future version of Pinguer",
+                    keyword.as_str()
+                ))
+                .with_code(codes::RESERVED_KEYWORD)
+                .with_primary(current.span, "reserved keyword")
+                .with_note("it has no meaning in Pinguer v0.1 and cannot be used as a name")
             }
-            _ => self.diagnostics.push(diagnostic),
+            _ => diagnostic,
+        };
+        let unclosed = diagnostic.code == Some(codes::UNCLOSED_DELIMITER);
+        if let (Some(span), Some((last, last_unclosed))) = (primary, self.last_error)
+            && span == last
+            && !(unclosed && last_unclosed)
+        {
+            return Reported;
         }
+        self.last_error = primary.map(|span| (span, unclosed));
+        self.diagnostics.push(diagnostic);
         Reported
     }
 

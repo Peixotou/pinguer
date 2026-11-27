@@ -407,7 +407,10 @@ mod primary_expr {
             ["expected `)` to close `(`, found end of file"]
         );
         for (text, message) in [
-            ("const X = (", "expected expression, found end of file"),
+            (
+                "const X = (",
+                "expected `)` to close `(`, found end of file",
+            ),
             ("const X = ()", "expected expression, found `)`"),
         ] {
             assert_eq!(parse(text).messages, [message], "{text}");
@@ -717,10 +720,16 @@ mod call_suffix {
     #[test]
     fn malformed_argument_lists() {
         for (text, code, message) in [
+            // Before the end of the file only the `)` can be missing.
             (
                 "const X = f(",
-                "P2004",
-                "expected expression, found end of file",
+                "P2008",
+                "expected `)` to close `(`, found end of file",
+            ),
+            (
+                "const X = f(a,",
+                "P2008",
+                "expected `)` to close `(`, found end of file",
             ),
             (
                 "const X = f(a",
@@ -1746,5 +1755,45 @@ mod precedence_pairs {
                 assert_eq!(shape(&text), expected, "{text}");
             }
         }
+    }
+}
+
+mod one_diagnostic_per_problem {
+    use super::*;
+
+    #[test]
+    fn an_opening_delimiter_before_a_closing_brace_is_reported_as_unclosed() {
+        for (text, kept) in [
+            ("func f() {\n    let x = (\n}", "Let #"),
+            ("func f() {\n    g(a,\n}", "Call #"),
+            ("func f() {\n    g(\n}", "Call #"),
+        ] {
+            let parsed = parse(text);
+            assert_eq!(parsed.codes, ["P2008"], "{text:?}");
+            assert_eq!(parsed.labelled, ["}"], "{text:?}");
+            assert!(parsed.tree.contains(kept), "{text:?}\n{}", parsed.tree);
+        }
+    }
+
+    #[test]
+    fn what_a_completed_construct_still_lacks_at_the_same_token_is_not_reported() {
+        // Without the `)`, the `while` has no block and the `if` no block,
+        // the binding no initializer and the item no separator, all at the
+        // same `}`.
+        for text in [
+            "func f() {\n    while (x\n}",
+            "func f() {\n    if g(\n}",
+            "func f() {\n    let x: (\n}",
+            "const X = (1 }",
+        ] {
+            let parsed = parse(text);
+            assert_eq!(parsed.codes, ["P2008"], "{text:?}: {:?}", parsed.messages);
+        }
+    }
+
+    #[test]
+    fn each_unclosed_delimiter_is_still_reported() {
+        let parsed = parse("func f() {\n    g(a, (b\n}");
+        assert_eq!(parsed.codes, ["P2008", "P2008"]);
     }
 }
