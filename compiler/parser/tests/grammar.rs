@@ -277,6 +277,15 @@ mod primary_expr {
     }
 
     #[test]
+    fn character_literals_are_decoded() {
+        assert_eq!(value("'a'"), "    Char #1 @1:11-1:14 'a'\n");
+        assert_eq!(value(r"'\u{1F427}'"), "    Char #1 @1:11-1:22 '🐧'\n");
+        let parsed = parse("const X = 'ab'");
+        assert_eq!(parsed.codes, ["P1008"]);
+        assert!(parsed.tree.contains("    ErrorExpr #1"));
+    }
+
+    #[test]
     fn malformed_integer_literals_are_reported_once_by_the_lexer() {
         for (text, code) in [
             ("0b12", "P1006"),

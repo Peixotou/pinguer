@@ -82,6 +82,18 @@ pub(crate) fn decode_string(text: &str) -> Option<Box<str>> {
     }
 }
 
+/// Decodes a character literal, quotes included: exactly one Unicode scalar
+/// value, written directly or as an escape sequence.
+pub(crate) fn decode_char(text: &str) -> Option<char> {
+    let mut chars = text.strip_prefix('\'')?.chars();
+    let value = match chars.next()? {
+        '\'' => return None,
+        '\\' => escape(&mut chars)?,
+        c => c,
+    };
+    (chars.as_str() == "'").then_some(value)
+}
+
 /// Decodes the escape sequence after a `\`: `\n \r \t \\ \0 \" \'` or
 /// `\u{X}` with one to six hexadecimal digits naming a Unicode scalar value.
 fn escape(chars: &mut std::str::Chars<'_>) -> Option<char> {
@@ -247,6 +259,23 @@ mod tests {
             "abc",
         ] {
             assert_eq!(decode_string(text), None, "{text}");
+        }
+    }
+
+    #[test]
+    fn characters_hold_one_scalar_value() {
+        for (text, value) in [
+            ("'a'", 'a'),
+            ("'🐧'", '🐧'),
+            (r"'\n'", '\n'),
+            (r"'\''", '\''),
+            ("'\"'", '"'),
+            (r"'\u{E9}'", 'é'),
+        ] {
+            assert_eq!(decode_char(text), Some(value), "{text}");
+        }
+        for text in ["''", "'ab'", "'a", "'", r"'\q'", "'e\u{301}'", "a"] {
+            assert_eq!(decode_char(text), None, "{text}");
         }
     }
 

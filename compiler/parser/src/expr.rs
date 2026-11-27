@@ -12,7 +12,7 @@ impl Parser<'_> {
         self.primary()
     }
 
-    /// `PrimaryExpr = INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | … | IDENT | …`
+    /// `PrimaryExpr = INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | CHAR_LITERAL | … | IDENT | …`
     ///
     /// A literal the lexer reported as malformed becomes an error
     /// expression without a second diagnostic.
@@ -40,6 +40,13 @@ impl Parser<'_> {
                 let token = self.cursor.bump();
                 match literal::decode_string(&self.text[token.span.range()]) {
                     Some(value) => ast::ExprKind::Literal(ast::Literal::String(value)),
+                    None => ast::ExprKind::Error,
+                }
+            }
+            TokenKind::Char => {
+                let token = self.cursor.bump();
+                match literal::decode_char(&self.text[token.span.range()]) {
+                    Some(value) => ast::ExprKind::Literal(ast::Literal::Char(value)),
                     None => ast::ExprKind::Error,
                 }
             }
