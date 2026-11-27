@@ -30,6 +30,40 @@ pub(crate) fn decode_int(text: &str) -> Option<(Option<u128>, Base)> {
     Some((value, base))
 }
 
+/// Decodes a floating-point literal such as `1.5`, `6.02e23` or `1e-9` into
+/// its digits without separators.
+///
+/// The value is not computed here: rounding happens once, when the type
+/// checker parses these digits at the expected type (`f32` or `f64`) with
+/// the standard library, which rounds correctly and does not depend on the
+/// locale.
+pub(crate) fn decode_float(text: &str) -> Option<Box<str>> {
+    // `float_literal = decimal_part , "." , digit_run , [ exponent ]
+    //                | decimal_part , exponent`
+    let (mantissa, exponent) = match text.find(['e', 'E']) {
+        Some(index) => (&text[..index], Some(&text[index + 1..])),
+        None => (text, None),
+    };
+    let (integer, fraction) = match mantissa.split_once('.') {
+        Some((integer, fraction)) => (integer, Some(fraction)),
+        None => (mantissa, None),
+    };
+    if fraction.is_none() && exponent.is_none() {
+        return None;
+    }
+    if integer.len() > 1 && integer.starts_with('0') {
+        return None;
+    }
+    digit_run(integer, 10)?;
+    if let Some(fraction) = fraction {
+        digit_run(fraction, 10)?;
+    }
+    if let Some(exponent) = exponent {
+        digit_run(exponent.strip_prefix(['+', '-']).unwrap_or(exponent), 10)?;
+    }
+    Some(text.replace('_', "").into_boxed_str())
+}
+
 /// Decodes `digit , { [ "_" ] , digit }` in `radix`. Returns `None` if
 /// `text` does not have that form, and `Some(None)` if the value does not
 /// fit in a `u128`.
@@ -98,6 +132,34 @@ mod tests {
         assert_eq!(decode_int(&long), Some((None, Base::Decimal)));
         let hex = format!("0x1{}", "0".repeat(32));
         assert_eq!(decode_int(&hex), Some((None, Base::Hexadecimal)));
+    }
+
+    #[test]
+    fn floats_keep_their_digits_without_separators() {
+        for (text, digits) in [
+            ("1.5", "1.5"),
+            ("0.25", "0.25"),
+            ("6.02e23", "6.02e23"),
+            ("1e-9", "1e-9"),
+            ("2E+10", "2E+10"),
+            ("1_000.000_1", "1000.0001"),
+            ("1e1_0", "1e10"),
+        ] {
+            let decoded = decode_float(text);
+            assert_eq!(decoded.as_deref(), Some(digits), "{text}");
+            // The type checker can parse every decoded literal.
+            assert!(digits.parse::<f64>().is_ok() && digits.parse::<f32>().is_ok());
+        }
+    }
+
+    #[test]
+    fn malformed_floats_do_not_decode() {
+        for text in [
+            "1", "1.", "1e", "1e+", "2.5E-", "01.5", "00.5", "1._5", "1_.5", "1.5_", "1.5f32",
+            "1e5e", "1.5.2", "0x1.5",
+        ] {
+            assert_eq!(decode_float(text), None, "{text}");
+        }
     }
 
     #[test]

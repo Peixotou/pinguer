@@ -252,6 +252,15 @@ mod primary_expr {
     }
 
     #[test]
+    fn floating_point_literals_keep_their_digits() {
+        assert_eq!(value("6.02e23"), "    Float #1 @1:11-1:18 6.02e23\n");
+        assert_eq!(value("1_000.5"), "    Float #1 @1:11-1:18 1000.5\n");
+        let parsed = parse("const X = 1.5e");
+        assert_eq!(parsed.codes, ["P1006"]);
+        assert!(parsed.tree.contains("    ErrorExpr #1"));
+    }
+
+    #[test]
     fn malformed_integer_literals_are_reported_once_by_the_lexer() {
         for (text, code) in [
             ("0b12", "P1006"),
