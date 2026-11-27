@@ -17,9 +17,15 @@ server will reuse it ([COMPILER_ARCHITECTURE.md §3.6](../architecture/COMPILER_
 
 ### Storage
 
-* An owned tree: `Box` for single children, `Vec` for lists. Nesting depth
-  is bounded by [ADR-0030](0030-parser-resource-limits.md), so recursive
-  construction, traversal and destruction are bounded too.
+* An owned tree: `Box` for single children, `Box<[T]>` for lists. Nesting
+  depth is bounded by [ADR-0030](0030-parser-resource-limits.md), so
+  recursive construction, traversal and destruction are bounded too.
+* Lists are boxed slices because the tree is not modified after parsing: a
+  `Vec` keeps the capacity it grew to, at least four elements, which for
+  the many one-operand chains and short argument lists was most of the
+  memory of the tree. Measured with a counting allocator on 10 MB inputs,
+  boxed slices reduced the heap of the tree from 144–228 to 78–92 bytes
+  per node, at the cost of one shrinking reallocation per list.
 * Node kinds are enums over the v0.1 constructs only: items (`import`,
   function, constant), statements, expressions and types. Each kind exists
   because the grammar has it; nothing is added for planned features.

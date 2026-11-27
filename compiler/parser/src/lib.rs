@@ -76,7 +76,7 @@ fn parse_with_id_capacity(
                      {id_capacity}"
                 )),
         );
-        tree.items.clear();
+        tree.items = Box::new([]);
         tree.node_count = 0;
     }
     tree

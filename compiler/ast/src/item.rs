@@ -10,7 +10,7 @@ pub struct File {
     /// The whole text of the file.
     pub span: Span,
     /// The top-level items, in order.
-    pub items: Vec<Item>,
+    pub items: Box<[Item]>,
     /// How many nodes the tree has. Every ID is below this number and every
     /// number below it is an ID, so a side table indexed by
     /// [`NodeId::index`] needs this many entries.
@@ -46,7 +46,7 @@ pub enum ItemKind {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Import {
     /// The components of the module path. Never empty.
-    pub path: Vec<Ident>,
+    pub path: Box<[Ident]>,
 }
 
 /// `func name(params) -> ret { body }`.
@@ -55,7 +55,7 @@ pub struct Func {
     /// The function's name.
     pub name: Ident,
     /// The parameters, in order.
-    pub params: Vec<Param>,
+    pub params: Box<[Param]>,
     /// The return type, or `None` when no `-> Type` was written and the
     /// function returns the unit type.
     pub ret: Option<Type>,

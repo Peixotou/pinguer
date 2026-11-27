@@ -346,7 +346,7 @@ mod tests {
             id: b.id(),
             span: b.span(0, 13),
             kind: ItemKind::Import(Import {
-                path: vec![b.ident("std", 7), b.ident("io", 11)],
+                path: Box::new([b.ident("std", 7), b.ident("io", 11)]),
             }),
         };
         let const_id = b.id();
@@ -395,11 +395,11 @@ mod tests {
                 span: b.span(30, 39),
                 kind: ExprKind::Binary {
                     first: Box::new(left),
-                    rest: vec![crate::BinaryOperand {
+                    rest: Box::new([crate::BinaryOperand {
                         op: BinaryOp::Add,
                         op_span: b.span(32, 33),
                         operand: right,
-                    }],
+                    }]),
                 },
             };
             let let_stmt = Stmt {
@@ -438,26 +438,26 @@ mod tests {
             let then_block = Block {
                 id: b.id(),
                 span: b.span(62, 64),
-                stmts: Vec::new(),
+                stmts: Box::new([]),
             };
             let else_block = Block {
                 id: b.id(),
                 span: b.span(70, 72),
-                stmts: vec![Stmt {
+                stmts: Box::new([Stmt {
                     id: b.id(),
                     span: b.span(70, 71),
                     kind: StmtKind::Break,
-                }],
+                }]),
             };
             let if_stmt = Stmt {
                 id: if_id,
                 span: b.span(54, 72),
                 kind: StmtKind::If(If {
-                    branches: vec![IfBranch {
+                    branches: Box::new([IfBranch {
                         span: b.span(54, 64),
                         cond,
                         block: then_block,
-                    }],
+                    }]),
                     else_block: Some(else_block),
                 }),
             };
@@ -490,11 +490,11 @@ mod tests {
                     span: b.span(73, 80),
                     kind: ExprKind::Call {
                         callee: Box::new(member),
-                        args: vec![arg],
+                        args: Box::new([arg]),
                     },
                 }),
             };
-            vec![let_stmt, assign, if_stmt, call_stmt]
+            Box::new([let_stmt, assign, if_stmt, call_stmt])
         };
         let body = Block {
             id: body_id,
@@ -506,14 +506,14 @@ mod tests {
             span: b.span(0, 80),
             kind: ItemKind::Func(Func {
                 name: b.ident("f", 5),
-                params: vec![param],
+                params: Box::new([param]),
                 ret: Some(ret),
                 body,
             }),
         };
         let file = File {
             span: b.span(0, 80),
-            items: vec![import, constant, func],
+            items: Box::new([import, constant, func]),
             node_count: b.next,
         };
         let expected = "\
@@ -573,7 +573,7 @@ File @1:1-1:81 nodes=29
         );
         let file = File {
             span: b.span(0, 20),
-            items: vec![
+            items: Box::new([
                 Item {
                     id: b.id(),
                     span: b.span(0, 2),
@@ -599,7 +599,7 @@ File @1:1-1:81 nodes=29
                         value: big,
                     }),
                 },
-            ],
+            ]),
             node_count: b.next,
         };
         let rendered = render_to_string(&file, map.file(file_id));

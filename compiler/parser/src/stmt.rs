@@ -50,7 +50,7 @@ impl Parser<'_> {
         Ok(ast::Block {
             id: PENDING,
             span: self.span_from(start),
-            stmts,
+            stmts: stmts.into(),
         })
     }
 
@@ -184,7 +184,7 @@ impl Parser<'_> {
             }
         }
         Ok(ast::If {
-            branches,
+            branches: branches.into(),
             else_block,
         })
     }

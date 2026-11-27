@@ -12,7 +12,7 @@ pub struct Block {
     /// The tokens from `{` to `}`.
     pub span: Span,
     /// The statements, in order.
-    pub stmts: Vec<Stmt>,
+    pub stmts: Box<[Stmt]>,
 }
 
 /// A statement.
@@ -78,7 +78,7 @@ pub enum StmtKind {
 pub struct If {
     /// The `if` branch followed by every `else if` branch, in order. Never
     /// empty.
-    pub branches: Vec<IfBranch>,
+    pub branches: Box<[IfBranch]>,
     /// The final `else` block, if there is one.
     pub else_block: Option<Block>,
 }

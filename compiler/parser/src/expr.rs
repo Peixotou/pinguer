@@ -68,7 +68,10 @@ impl Parser<'_> {
             });
         }
         self.depth -= 1;
-        self.enclose(start, left, |first| ast::ExprKind::Binary { first, rest });
+        self.enclose(start, left, |first| ast::ExprKind::Binary {
+            first,
+            rest: rest.into(),
+        });
         Ok(())
     }
 
@@ -180,7 +183,10 @@ impl Parser<'_> {
                     self.depth += 1;
                     let args = self.args(open)?;
                     self.depth -= 1;
-                    self.enclose(start, expr, |callee| ast::ExprKind::Call { callee, args });
+                    self.enclose(start, expr, |callee| ast::ExprKind::Call {
+                        callee,
+                        args: args.into(),
+                    });
                 }
                 // `MemberSuffix = "." , IDENT`. Whether the base is a
                 // module, as v0.1 requires, is checked by name resolution.

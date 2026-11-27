@@ -40,7 +40,7 @@ pub enum ExprKind {
         first: Box<Expr>,
         /// The operators and the operands to their right, in order. Never
         /// empty; all operators have the same precedence.
-        rest: Vec<BinaryOperand>,
+        rest: Box<[BinaryOperand]>,
     },
     /// An explicit conversion, `operand as ty`.
     Cast {
@@ -54,7 +54,7 @@ pub enum ExprKind {
         /// The called expression.
         callee: Box<Expr>,
         /// The arguments, in order.
-        args: Vec<Expr>,
+        args: Box<[Expr]>,
     },
     /// A member access, `base.name`. In v0.1 the base must be a module
     /// name; name resolution checks that.

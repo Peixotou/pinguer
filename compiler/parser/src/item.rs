@@ -29,7 +29,7 @@ impl Parser<'_> {
         }
         ast::File {
             span,
-            items,
+            items: items.into(),
             node_count: 0,
         }
     }
@@ -129,7 +129,7 @@ impl Parser<'_> {
             self.cursor.bump();
             path.push(self.ident()?);
         }
-        Ok(ast::ItemKind::Import(ast::Import { path }))
+        Ok(ast::ItemKind::Import(ast::Import { path: path.into() }))
     }
 
     /// `FuncDecl = "func" , IDENT , "(" , [ ParamList ] , ")" , [ "->" ,
@@ -148,7 +148,7 @@ impl Parser<'_> {
         let body = self.block()?;
         Ok(ast::ItemKind::Func(ast::Func {
             name,
-            params,
+            params: params.into(),
             ret,
             body,
         }))
