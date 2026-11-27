@@ -1,4 +1,4 @@
-//! Scalability regression tests for `pinguer debug tokens`.
+//! Scalability regression tests for `pinguer debug tokens` and `debug ast`.
 //!
 //! These tests check the properties that made the front end scale linearly:
 //! output that does not grow with the input once the diagnostic limit is
@@ -134,5 +134,64 @@ fn many_lines_report_line_numbers_exactly() {
     assert!(
         stderr.contains(&format!(" --> {}:{}:1\n", path.display(), lines + 1)),
         "{stderr}"
+    );
+}
+
+fn debug_ast(path: &std::path::Path) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_pinguer"))
+        .args(["debug", "ast"])
+        .arg(path)
+        .output()
+        .expect("failed to run the pinguer executable")
+}
+
+#[test]
+fn parser_diagnostics_do_not_grow_with_the_input() {
+    let dir = TempDir::new("parser-output-size");
+    let mut sizes = Vec::new();
+    for statements in [10_000usize, 100_000, 400_000] {
+        // Each line is an expression that is not a statement (`P2012`).
+        let source = format!("func f() {{\n{}}}\n", "    -x\n".repeat(statements));
+        let path = dir.file("broken.pgr", &source);
+        let output = debug_ast(&path);
+        assert_eq!(output.status.code(), Some(1));
+        let stderr = text(&output.stderr);
+        assert_eq!(stderr.matches("error[P2012]").count(), 100);
+        assert!(
+            stderr.ends_with(&format!(
+                "error: aborting due to {statements} previous errors\n"
+            )),
+            "{statements}"
+        );
+        sizes.push(stderr.len());
+    }
+    let spread = sizes.iter().max().unwrap() - sizes.iter().min().unwrap();
+    assert!(spread <= 8, "{sizes:?}");
+}
+
+#[test]
+fn large_valid_inputs_parse_completely() {
+    let dir = TempDir::new("parser-large");
+    // One chain of a million operands: one `Const`, one `Binary` and the
+    // operands.
+    let terms = 1_000_000;
+    let source = format!("const X = 0{}\n", " + x".repeat(terms - 1));
+    let path = dir.file("sum.pgr", &source);
+    let output = debug_ast(&path);
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    let first = text(&output.stdout).lines().next().unwrap().to_owned();
+    assert!(first.ends_with(&format!(" nodes={}", terms + 2)), "{first}");
+
+    // A hundred thousand functions of nine nodes each: `Func`, `Param`, two
+    // `Type`s, `Block`, `Return`, `Binary`, `Name` and `Int`.
+    let functions = 100_000;
+    let unit = "func f(a: int) -> int {\n    return a * 2\n}\n";
+    let path = dir.file("functions.pgr", &unit.repeat(functions));
+    let output = debug_ast(&path);
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    let first = text(&output.stdout).lines().next().unwrap().to_owned();
+    assert!(
+        first.ends_with(&format!(" nodes={}", functions * 9)),
+        "{first}"
     );
 }
