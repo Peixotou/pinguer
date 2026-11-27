@@ -4,6 +4,7 @@ use pinguer_ast as ast;
 use pinguer_diagnostics::{Diagnostic, codes};
 use pinguer_lexer::{Keyword, TokenKind};
 
+use crate::ids::PENDING;
 use crate::{PResult, Parser, literal};
 
 impl Parser<'_> {
@@ -18,7 +19,6 @@ impl Parser<'_> {
     /// A literal the lexer reported as malformed becomes an error
     /// expression without a second diagnostic.
     fn primary(&mut self) -> PResult<ast::Expr> {
-        let id = self.next_id();
         let start = self.start();
         let kind = match self.cursor.kind() {
             TokenKind::Int => {
@@ -75,7 +75,7 @@ impl Parser<'_> {
             }
         };
         Ok(ast::Expr {
-            id,
+            id: PENDING,
             span: self.span_from(start),
             kind,
         })

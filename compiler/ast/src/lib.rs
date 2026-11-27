@@ -26,11 +26,10 @@ pub use ty::{Type, TypeKind};
 
 /// Identifies a node of one file's syntax tree.
 ///
-/// IDs are assigned consecutively in pre-order: a node gets its ID before
-/// its children, and children are numbered from left to right. The same
-/// input therefore always produces the same IDs, and a side table can be a
-/// vector indexed by [`NodeId::index`]. After a syntax error, the IDs of
-/// partly parsed nodes that recovery discarded are left unused.
+/// IDs are dense and assigned in pre-order once the tree is complete: a
+/// node gets its ID before its children, and children are numbered from
+/// left to right. The same input therefore always produces the same IDs,
+/// and a side table can be a vector indexed by [`NodeId::index`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct NodeId(u32);
 

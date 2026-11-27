@@ -9,6 +9,7 @@
 
 mod cursor;
 mod expr;
+mod ids;
 mod item;
 mod literal;
 mod newline;
@@ -44,9 +45,10 @@ pub fn parse(
         text,
         file,
         diagnostics,
-        next_id: 0,
     };
-    parser.file(Span::new(file, 0, text_len))
+    let mut tree = parser.file(Span::new(file, 0, text_len));
+    ids::number(&mut tree);
+    tree
 }
 
 /// Records that a diagnostic has been reported for the construct being
@@ -61,19 +63,9 @@ struct Parser<'a> {
     text: &'a str,
     file: FileId,
     diagnostics: &'a mut Diagnostics,
-    /// The ID the next node gets.
-    next_id: u32,
 }
 
 impl Parser<'_> {
-    /// Returns the ID of a new node. IDs are handed out in pre-order: call
-    /// this before parsing the node's children.
-    fn next_id(&mut self) -> ast::NodeId {
-        let id = ast::NodeId::new(self.next_id);
-        self.next_id = self.next_id.saturating_add(1);
-        id
-    }
-
     /// Returns the span from `start` to the end of the last consumed token,
     /// or an empty span at `start` if nothing was consumed since.
     fn span_from(&self, start: u32) -> Span {

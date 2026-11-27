@@ -5,6 +5,7 @@ use pinguer_diagnostics::{Diagnostic, codes};
 use pinguer_lexer::{Keyword, TokenKind};
 use pinguer_source::Span;
 
+use crate::ids::PENDING;
 use crate::{PResult, Parser, Reported};
 
 impl Parser<'_> {
@@ -31,13 +32,12 @@ impl Parser<'_> {
         ast::File {
             span,
             items,
-            node_count: self.next_id,
+            node_count: 0,
         }
     }
 
     /// `Item = ImportDecl | FuncDecl | ConstDecl`
     fn item(&mut self) -> ast::Item {
-        let id = self.next_id();
         let start = self.start();
         let kind = match self.cursor.kind() {
             TokenKind::Keyword(Keyword::Import) => self.import(),
@@ -47,7 +47,7 @@ impl Parser<'_> {
             _ => Err(self.expected_item()),
         };
         ast::Item {
-            id,
+            id: PENDING,
             span: self.span_from(start),
             kind: kind.unwrap_or(ast::ItemKind::Error),
         }

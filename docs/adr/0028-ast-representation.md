@@ -28,12 +28,14 @@ server will reuse it ([COMPILER_ARCHITECTURE.md §3.6](../architecture/COMPILER_
 
 * Every item, parameter, block, statement, expression and type has a
   `NodeId`, a `u32` that is unique within one file's tree. IDs are assigned
-  consecutively in pre-order (a node before its children, children left to
-  right), so the same input always produces the same IDs and a side table
-  can be a vector indexed by ID. The tree records how many IDs were
-  assigned. Every ID of a tree without syntax errors belongs to a node;
-  when recovery replaces a partly parsed construct with an error node, the
-  IDs already given to its discarded children are left unused.
+  after parsing, by one pre-order walk of the finished tree (a node before
+  its children, children left to right). They are therefore dense: every
+  ID below the tree's node count belongs to exactly one node, also after
+  error recovery, because discarded nodes never reach the tree. The same
+  input always produces the same IDs, so a side table can be a vector
+  indexed by ID. Numbering after parsing also makes the IDs independent of
+  the order in which the parser builds nodes: precedence climbing builds
+  the left operand of a binary expression before the expression.
 * Every node has the `Span` of the tokens it was parsed from. A name is an
   `Ident`: the text and its span, without an ID of its own; the node that
   contains it is what later phases annotate.

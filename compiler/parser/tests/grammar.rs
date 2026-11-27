@@ -87,6 +87,30 @@ mod file {
         );
     }
 
+    /// Asserts that the IDs of the tree rendered for `text` are exactly
+    /// `0..node_count`, in the order the lines appear, which is pre-order.
+    fn assert_dense_pre_order(text: &str) {
+        let mut map = SourceMap::new();
+        let file = map.add("ids.pgr", text).unwrap();
+        let mut diagnostics = Diagnostics::new();
+        let tokens = pinguer_lexer::tokenize(file, text, &mut diagnostics);
+        let tree = pinguer_parser::parse(file, text, tokens, &mut diagnostics);
+        let rendered = pinguer_ast::render_to_string(&tree, map.file(file));
+        let ids: Vec<u32> = rendered
+            .split_whitespace()
+            .filter_map(|word| word.strip_prefix('#')?.parse().ok())
+            .collect();
+        let expected: Vec<u32> = (0..tree.node_count).collect();
+        assert_eq!(ids, expected, "{text:?}\n{rendered}");
+    }
+
+    #[test]
+    fn node_ids_are_dense_and_in_pre_order() {
+        assert_dense_pre_order("import a.b\nconst X: int = ((y))\nconst Z = 0x10");
+        // An error node replaces the item; no ID is left unused.
+        assert_dense_pre_order("const X: int = (y");
+    }
+
     #[test]
     fn items_on_one_line_need_a_semicolon() {
         let parsed = parse("import a import b");

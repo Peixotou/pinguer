@@ -4,6 +4,7 @@ use pinguer_ast as ast;
 use pinguer_diagnostics::{Diagnostic, codes};
 use pinguer_lexer::TokenKind;
 
+use crate::ids::PENDING;
 use crate::{PResult, Parser};
 
 impl Parser<'_> {
@@ -11,7 +12,6 @@ impl Parser<'_> {
     ///
     /// Names are not resolved: `int` and `Point` are both type names here.
     pub(crate) fn ty(&mut self) -> PResult<ast::Type> {
-        let id = self.next_id();
         let start = self.start();
         let kind = match self.cursor.kind() {
             TokenKind::Ident => ast::TypeKind::Name(self.ident()?),
@@ -30,7 +30,7 @@ impl Parser<'_> {
             }
         };
         Ok(ast::Type {
-            id,
+            id: PENDING,
             span: self.span_from(start),
             kind,
         })
