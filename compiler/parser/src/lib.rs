@@ -149,6 +149,9 @@ impl Parser<'_> {
     /// separator, the end of its block or the end of the file.
     fn missing_separator(&mut self, what: &str) -> Reported {
         let found = self.cursor.current();
+        if is_closing_delimiter(found.kind) {
+            return self.unexpected_closing_delimiter();
+        }
         let mut diagnostic = Diagnostic::error(format!(
             "expected a line break or `;` after the {what}, found {}",
             self.describe(found)
@@ -162,6 +165,17 @@ impl Parser<'_> {
             );
         }
         self.error(diagnostic)
+    }
+
+    /// Reports the current token, a closing delimiter that no opening one
+    /// matches. Recovery skips it (ADR-0029).
+    fn unexpected_closing_delimiter(&mut self) -> Reported {
+        let found = self.cursor.current();
+        self.error(
+            Diagnostic::error(format!("unexpected closing delimiter {}", found.kind))
+                .with_code(codes::UNEXPECTED_CLOSING_DELIMITER)
+                .with_primary(found.span, "no opening delimiter matches this one"),
+        )
     }
 
     /// Reports `diagnostic`, unless it blames an [`TokenKind::Unknown`]
@@ -191,4 +205,12 @@ impl Parser<'_> {
             kind => kind.to_string(),
         }
     }
+}
+
+/// Returns `true` for `)`, `]` and `}`.
+fn is_closing_delimiter(kind: TokenKind) -> bool {
+    matches!(
+        kind,
+        TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace
+    )
 }

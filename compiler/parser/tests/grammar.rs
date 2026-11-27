@@ -1482,3 +1482,37 @@ mod unknown_token_recovery {
         assert_eq!(parsed.codes, ["P1001", "P2012"]);
     }
 }
+
+mod unexpected_closing_delimiter {
+    use super::*;
+
+    #[test]
+    fn a_closer_where_an_item_starts() {
+        let parsed = parse("}\n)\nconst X = 1");
+        assert_eq!(parsed.codes, ["P2016"]);
+        assert_eq!(parsed.messages, ["unexpected closing delimiter `}`"]);
+        assert_eq!(parsed.labelled, ["}"]);
+        assert!(parsed.tree.contains("Const #"), "{}", parsed.tree);
+    }
+
+    #[test]
+    fn a_closer_after_an_item() {
+        let parsed = parse("func f() {\n}}\nconst X = (1))");
+        assert_eq!(parsed.codes, ["P2016", "P2016"]);
+        assert_eq!(parsed.labelled, ["}", ")"]);
+        assert!(parsed.tree.contains("Const #"), "{}", parsed.tree);
+    }
+
+    #[test]
+    fn closers_in_a_block_are_reported_and_skipped() {
+        let parsed = parse("func f() {\n    g())\n    ]\n    h()\n}");
+        assert_eq!(parsed.codes, ["P2016", "P2016"]);
+        assert_eq!(parsed.labelled, [")", "]"]);
+        assert_eq!(
+            parsed.tree.matches("ExprStmt").count(),
+            2,
+            "{}",
+            parsed.tree
+        );
+    }
+}

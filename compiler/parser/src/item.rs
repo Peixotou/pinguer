@@ -81,6 +81,7 @@ impl Parser<'_> {
             TokenKind::Keyword(Keyword::Const) => self
                 .binding(ast::BindingKind::Const)
                 .map(ast::ItemKind::Const),
+            kind if crate::is_closing_delimiter(kind) => Err(self.unexpected_closing_delimiter()),
             _ => Err(self.expected_item()),
         };
         ast::Item {

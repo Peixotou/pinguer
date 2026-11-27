@@ -109,6 +109,8 @@ impl Parser<'_> {
                 self.cursor.bump();
                 Ok(ast::StmtKind::Continue)
             }
+            // `}` ends the block instead.
+            TokenKind::RParen | TokenKind::RBracket => Err(self.unexpected_closing_delimiter()),
             _ => self.expr_stmt(),
         };
         ast::Stmt {

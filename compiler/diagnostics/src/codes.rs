@@ -145,6 +145,8 @@ define_codes! {
     BRACE_ON_NEXT_LINE = 2014, "`{` on the next line";
     /// An `else` on the line after the `}` of its `if`.
     ELSE_ON_NEXT_LINE = 2015, "`else` on the next line";
+    /// A closing delimiter without a matching opening one.
+    UNEXPECTED_CLOSING_DELIMITER = 2016, "closing delimiter without an opening one";
 }
 
 #[cfg(test)]
