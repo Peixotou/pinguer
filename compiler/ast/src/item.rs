@@ -11,7 +11,7 @@ pub struct File {
     pub span: Span,
     /// The top-level items, in order.
     pub items: Vec<Item>,
-    /// How many node IDs the tree uses: every ID is below this number, so a
+    /// How many node IDs were assigned: every ID is below this number, so a
     /// side table indexed by [`NodeId::index`] needs this many entries.
     pub node_count: u32,
 }
