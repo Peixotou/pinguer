@@ -1,0 +1,104 @@
+File @1:1-36:1 nodes=94
+  Import #0 @2:1-2:14 std.io
+  Const #1 @4:1-4:17 LIMIT
+    Int #2 @4:15-4:17 20 decimal
+  Func #3 @6:1-11:2 fibRecursive
+    Param #4 @6:19-6:25 n
+      Type #5 @6:22-6:25 int
+    Type #6 @6:30-6:33 int
+    Block #7 @6:34-11:2
+      If #8 @7:5-9:6
+        Branch @7:5-9:6
+          Binary #9 @7:8-7:13
+            Name #10 @7:8-7:9 n
+            Op @7:10-7:11 <
+            Int #11 @7:12-7:13 2 decimal
+          Block #12 @7:14-9:6
+            Return #13 @8:9-8:17
+              Name #14 @8:16-8:17 n
+      Return #15 @10:5-10:53
+        Binary #16 @10:12-10:53
+          Call #17 @10:12-10:31
+            Name #18 @10:12-10:24 fibRecursive
+            Binary #19 @10:25-10:30
+              Name #20 @10:25-10:26 n
+              Op @10:27-10:28 -
+              Int #21 @10:29-10:30 1 decimal
+          Op @10:32-10:33 +
+          Call #22 @10:34-10:53
+            Name #23 @10:34-10:46 fibRecursive
+            Binary #24 @10:47-10:52
+              Name #25 @10:47-10:48 n
+              Op @10:49-10:50 -
+              Int #26 @10:51-10:52 2 decimal
+  Func #27 @13:1-24:2 fibIterative
+    Param #28 @13:19-13:25 n
+      Type #29 @13:22-13:25 int
+    Type #30 @13:30-13:33 int
+    Block #31 @13:34-24:2
+      Var #32 @14:5-14:21 previous
+        Int #33 @14:20-14:21 0 decimal
+      Var #34 @15:5-15:20 current
+        Int #35 @15:19-15:20 1 decimal
+      Var #36 @16:5-16:14 i
+        Int #37 @16:13-16:14 0 decimal
+      While #38 @17:5-22:6
+        Binary #39 @17:11-17:16
+          Name #40 @17:11-17:12 i
+          Op @17:13-17:14 <
+          Name #41 @17:15-17:16 n
+        Block #42 @17:17-22:6
+          Let #43 @18:9-18:38 next
+            Binary #44 @18:20-18:38
+              Name #45 @18:20-18:28 previous
+              Op @18:29-18:30 +
+              Name #46 @18:31-18:38 current
+          Assign #47 @19:9-19:27 previous =
+            Name #48 @19:20-19:27 current
+          Assign #49 @20:9-20:23 current =
+            Name #50 @20:19-20:23 next
+          Assign #51 @21:9-21:15 i +=
+            Int #52 @21:14-21:15 1 decimal
+      Return #53 @23:5-23:20
+        Name #54 @23:12-23:20 previous
+  Func #55 @26:1-35:2 main
+    Block #56 @26:13-35:2
+      Var #57 @27:5-27:14 n
+        Int #58 @27:13-27:14 0 decimal
+      While #59 @28:5-33:6
+        Binary #60 @28:11-28:21
+          Name #61 @28:11-28:12 n
+          Op @28:13-28:15 <=
+          Name #62 @28:16-28:21 LIMIT
+        Block #63 @28:22-33:6
+          ExprStmt #64 @29:9-29:20
+            Call #65 @29:9-29:20
+              Member #66 @29:9-29:17 .print
+                Name #67 @29:9-29:11 io
+              Name #68 @29:18-29:19 n
+          ExprStmt #69 @30:9-30:23
+            Call #70 @30:9-30:23
+              Member #71 @30:9-30:17 .print
+                Name #72 @30:9-30:11 io
+              String #73 @30:18-30:22 ": "
+          ExprStmt #74 @31:9-31:36
+            Call #75 @31:9-31:36
+              Member #76 @31:9-31:19 .println
+                Name #77 @31:9-31:11 io
+              Call #78 @31:20-31:35
+                Name #79 @31:20-31:32 fibIterative
+                Name #80 @31:33-31:34 n
+          Assign #81 @32:9-32:15 n +=
+            Int #82 @32:14-32:15 1 decimal
+      ExprStmt #83 @34:5-34:59
+        Call #84 @34:5-34:59
+          Member #85 @34:5-34:15 .println
+            Name #86 @34:5-34:7 io
+          Binary #87 @34:16-34:58
+            Call #88 @34:16-34:35
+              Name #89 @34:16-34:28 fibRecursive
+              Name #90 @34:29-34:34 LIMIT
+            Op @34:36-34:38 ==
+            Call #91 @34:39-34:58
+              Name #92 @34:39-34:51 fibIterative
+              Name #93 @34:52-34:57 LIMIT

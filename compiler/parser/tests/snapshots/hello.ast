@@ -1,0 +1,9 @@
+File @1:1-7:1 nodes=8
+  Import #0 @2:1-2:14 std.io
+  Func #1 @4:1-6:2 main
+    Block #2 @4:13-6:2
+      ExprStmt #3 @5:5-5:34
+        Call #4 @5:5-5:34
+          Member #5 @5:5-5:15 .println
+            Name #6 @5:5-5:7 io
+          String #7 @5:16-5:33 "Hello, Pinguer!"
