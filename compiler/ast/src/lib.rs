@@ -10,6 +10,7 @@
 
 mod expr;
 mod item;
+mod render;
 mod stmt;
 mod ty;
 
@@ -19,6 +20,7 @@ use pinguer_source::Span;
 
 pub use expr::{Base, BinaryOp, Expr, ExprKind, Literal, UnaryOp};
 pub use item::{File, Func, Import, Item, ItemKind, Param};
+pub use render::{render, render_to_string};
 pub use stmt::{AssignOp, Binding, BindingKind, Block, If, IfBranch, Stmt, StmtKind};
 pub use ty::{Type, TypeKind};
 
