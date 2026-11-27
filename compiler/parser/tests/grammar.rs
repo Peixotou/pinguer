@@ -556,3 +556,29 @@ mod shift_expr {
         );
     }
 }
+
+/// `BitAndExpr = ShiftExpr , { "&" , ShiftExpr }`,
+/// `BitXorExpr = BitAndExpr , { "^" , BitAndExpr }`,
+/// `BitOrExpr = BitXorExpr , { "|" , BitXorExpr }`
+mod bitwise_expr {
+    use super::*;
+
+    #[test]
+    fn each_operator_has_its_own_level() {
+        assert_eq!(shape("a & b ^ c | d"), "(((a & b) ^ c) | d)");
+        assert_eq!(shape("a | b ^ c & d"), "(a | (b ^ (c & d)))");
+        assert_eq!(shape("a | b | c"), "(a | b | c)");
+    }
+
+    #[test]
+    fn shifts_bind_more_tightly_than_and() {
+        assert_eq!(shape("a & b << c"), "(a & (b << c))");
+    }
+
+    #[test]
+    fn operands_are_required() {
+        for text in ["const X = a &", "const X = a ^", "const X = | a"] {
+            assert_eq!(parse(text).codes, ["P2004"], "{text}");
+        }
+    }
+}

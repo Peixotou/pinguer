@@ -147,6 +147,9 @@ impl Parser<'_> {
 /// tightly. The order is that of OPERATORS.md §1, which numbers the same
 /// levels from the tightest; the planned operators have no level yet.
 mod precedence {
+    pub(super) const BIT_OR: u8 = 5;
+    pub(super) const BIT_XOR: u8 = 6;
+    pub(super) const BIT_AND: u8 = 7;
     pub(super) const SHIFT: u8 = 8;
     pub(super) const ADDITIVE: u8 = 9;
     pub(super) const MULTIPLICATIVE: u8 = 10;
@@ -164,6 +167,9 @@ fn binary_op(kind: TokenKind) -> Option<(ast::BinaryOp, u8)> {
         TokenKind::Minus => (B::Sub, ADDITIVE),
         TokenKind::Shl => (B::Shl, SHIFT),
         TokenKind::Shr => (B::Shr, SHIFT),
+        TokenKind::Amp => (B::BitAnd, BIT_AND),
+        TokenKind::Caret => (B::BitXor, BIT_XOR),
+        TokenKind::Pipe => (B::BitOr, BIT_OR),
         _ => return None,
     })
 }
