@@ -11,7 +11,7 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use pinguer_diagnostics::{Diagnostic, Diagnostics, codes, human, json};
-use pinguer_source::{SourceError, SourceMap};
+use pinguer_source::{FileId, SourceError, SourceMap};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -201,7 +201,7 @@ fn run(args: &[OsString], output: &mut Output) -> u8 {
                 "`pinguer {planned}` is not available in Pinguer {VERSION}"
             ))
             .with_note(
-                "this version implements source loading, lexical analysis and diagnostics only",
+                "this version implements source loading, lexical analysis, parsing and diagnostics only",
             )
             .with_note("see ROADMAP.md for when this command is planned");
             output.diagnostic(&SourceMap::new(), &diagnostic);
@@ -222,6 +222,7 @@ Commands:
   help                  Print this help message
   version               Print version information
   debug tokens <file>   Print the token stream of a source file
+  debug ast <file>      Print the syntax tree of a source file
 
 Planned commands (not available in {VERSION}):
   {planned}
@@ -230,7 +231,7 @@ Options:
   -h, --help            Print this help message
   -V, --version         Print version information
 
-Options for `debug tokens`:
+Options for `debug tokens` and `debug ast`:
   --diagnostic-format <human|json>
                         How to print diagnostics (default: human). Errors in
                         any command line that contains it are printed in the
@@ -246,16 +247,25 @@ not stable.
 fn debug(args: &[OsString], output: &mut Output) -> u8 {
     match args.first() {
         Some(command) if command == "tokens" => debug_tokens(&args[1..], output),
+        Some(command) if command == "ast" => debug_ast(&args[1..], output),
         Some(other) => output.usage_error(&format!("unknown debug command `{}`", other.display())),
-        None => output.usage_error("missing debug command; the available one is `tokens`"),
+        None => {
+            output.usage_error("missing debug command; the available ones are `tokens` and `ast`")
+        }
     }
 }
 
-/// Parses the arguments of `debug tokens`. Options are compared as text; an
-/// argument that is not valid Unicode can only be the file name, which is
-/// passed to the operating system unchanged. `--diagnostic-format` is only
-/// validated here; [`requested_format`] has already applied it.
-fn debug_tokens(args: &[OsString], output: &mut Output) -> u8 {
+/// Parses the arguments of `debug <command>`, which takes one source file
+/// and `--diagnostic-format`, and returns the file, or the status of the
+/// usage error it reported. Options are compared as text; an argument that
+/// is not valid Unicode can only be the file name, which is passed to the
+/// operating system unchanged. `--diagnostic-format` is only validated
+/// here; [`requested_format`] has already applied it.
+fn debug_source_path<'a>(
+    command: &str,
+    args: &'a [OsString],
+    output: &mut Output,
+) -> Result<&'a OsStr, u8> {
     let mut path: Option<&OsStr> = None;
     let mut index = 0;
     while index < args.len() {
@@ -267,43 +277,61 @@ fn debug_tokens(args: &[OsString], output: &mut Output) -> u8 {
             index += 1;
             match args.get(index) {
                 Some(value) => Some(value.as_os_str()),
-                None => return output.usage_error("`--diagnostic-format` requires a value"),
+                None => return Err(output.usage_error("`--diagnostic-format` requires a value")),
             }
         } else {
             None
         };
         if let Some(value) = value {
             if !matches!(value.to_str(), Some("human" | "json")) {
-                return output.usage_error(&format!(
+                return Err(output.usage_error(&format!(
                     "invalid diagnostic format `{}`; expected `human` or `json`",
                     value.display()
-                ));
+                )));
             }
         } else if arg.as_encoded_bytes().starts_with(b"-") {
             // Reading from standard input (`-`) is not supported, and file
             // names starting with `-` must be written as `./-name`.
-            return output.usage_error(&format!("unknown option `{}`", arg.display()));
+            return Err(output.usage_error(&format!("unknown option `{}`", arg.display())));
         } else if path.is_some() {
-            return output.usage_error("`debug tokens` accepts exactly one file");
+            return Err(output.usage_error(&format!("`debug {command}` accepts exactly one file")));
         } else {
             path = Some(arg);
         }
         index += 1;
     }
-    let Some(path) = path else {
-        return output.usage_error("missing source file for `debug tokens`");
-    };
+    path.ok_or_else(|| output.usage_error(&format!("missing source file for `debug {command}`")))
+}
 
-    let mut map = SourceMap::new();
-    let mut diagnostics = Diagnostics::with_limit(DIAGNOSTIC_LIMIT);
+/// Loads the source file at `path` into `map`. If it cannot be loaded, the
+/// error is reported and `None` returned.
+fn load_source(
+    map: &mut SourceMap,
+    path: &OsStr,
+    diagnostics: &mut Diagnostics,
+    output: &mut Output,
+) -> Option<FileId> {
     let path = Path::new(path);
-    let file = match map.load(path) {
-        Ok(file) => file,
+    match map.load(path) {
+        Ok(file) => Some(file),
         Err(error) => {
             diagnostics.push(load_error(path, &error));
-            output.diagnostics(&map, &diagnostics);
-            return status::COMPILE_ERROR;
+            output.diagnostics(map, diagnostics);
+            None
         }
+    }
+}
+
+/// `debug tokens <file>`: prints the token stream of a source file.
+fn debug_tokens(args: &[OsString], output: &mut Output) -> u8 {
+    let path = match debug_source_path("tokens", args, output) {
+        Ok(path) => path,
+        Err(status) => return status,
+    };
+    let mut map = SourceMap::new();
+    let mut diagnostics = Diagnostics::with_limit(DIAGNOSTIC_LIMIT);
+    let Some(file) = load_source(&mut map, path, &mut diagnostics, output) else {
+        return status::COMPILE_ERROR;
     };
 
     let source = map.file(file);
@@ -317,10 +345,56 @@ fn debug_tokens(args: &[OsString], output: &mut Output) -> u8 {
         output.out_fmt(format_args!("{start}\t{:?}\t{text:?}\n", token.kind));
     }
     output.diagnostics(&map, &diagnostics);
+    finish(&diagnostics)
+}
+
+/// `debug ast <file>`: prints the syntax tree of a source file in the
+/// format of [`pinguer_ast::render`]. As with `debug tokens`, the output is
+/// printed even when the file has errors, so that recovery can be
+/// inspected.
+fn debug_ast(args: &[OsString], output: &mut Output) -> u8 {
+    let path = match debug_source_path("ast", args, output) {
+        Ok(path) => path,
+        Err(status) => return status,
+    };
+    let mut map = SourceMap::new();
+    let mut diagnostics = Diagnostics::with_limit(DIAGNOSTIC_LIMIT);
+    let Some(file) = load_source(&mut map, path, &mut diagnostics, output) else {
+        return status::COMPILE_ERROR;
+    };
+
+    let source = map.file(file);
+    let tokens = pinguer_lexer::tokenize(file, source.text(), &mut diagnostics);
+    let tree = pinguer_parser::parse(file, source.text(), tokens, &mut diagnostics);
+    // An error here means that standard output was closed, which `Output`
+    // records; there is nothing else to report.
+    let _ = pinguer_ast::render(&mut Stdout(output), &tree, source);
+    output.diagnostics(&map, &diagnostics);
+    finish(&diagnostics)
+}
+
+/// The exit status of a command whose input produced `diagnostics`.
+fn finish(diagnostics: &Diagnostics) -> u8 {
     if diagnostics.has_errors() {
         status::COMPILE_ERROR
     } else {
         status::SUCCESS
+    }
+}
+
+/// Standard output as a [`fmt::Write`]. Writing fails once standard output
+/// is closed, so that a renderer stops instead of producing output that
+/// nobody reads.
+struct Stdout<'a>(&'a mut Output);
+
+impl fmt::Write for Stdout<'_> {
+    fn write_str(&mut self, text: &str) -> fmt::Result {
+        self.0.out(text);
+        if self.0.stdout_closed {
+            Err(fmt::Error)
+        } else {
+            Ok(())
+        }
     }
 }
 

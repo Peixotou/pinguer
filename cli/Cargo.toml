@@ -21,6 +21,8 @@ harness = false
 pinguer_source.workspace = true
 pinguer_diagnostics.workspace = true
 pinguer_lexer.workspace = true
+pinguer_parser.workspace = true
+pinguer_ast.workspace = true
 
 [lints]
 workspace = true

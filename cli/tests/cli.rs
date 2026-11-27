@@ -71,6 +71,7 @@ fn help_lists_available_and_planned_commands() {
             "{text}"
         );
         assert!(text.contains("debug tokens <file>"), "{text}");
+        assert!(text.contains("debug ast <file>"), "{text}");
         assert!(text.contains("new, init, run, build, check, test, fmt, lint, doc, add, remove"));
     }
 }
@@ -124,13 +125,22 @@ fn help_and_version_reject_extra_arguments() {
 }
 
 #[test]
-fn debug_tokens_usage_errors() {
+fn debug_usage_errors() {
     for (args, message) in [
         (&["debug", "tokens", "-"][..], "unknown option `-`"),
         (&["debug"], "missing debug command"),
-        (&["debug", "ast"], "unknown debug command `ast`"),
+        (&["debug", "hir"], "unknown debug command `hir`"),
         (&["debug", "tokens"], "missing source file"),
         (&["debug", "tokens", "a.pgr", "b.pgr"], "exactly one file"),
+        (&["debug", "ast"], "missing source file for `debug ast`"),
+        (
+            &["debug", "ast", "a.pgr", "b.pgr"],
+            "`debug ast` accepts exactly one file",
+        ),
+        (
+            &["debug", "ast", "--tree", "a.pgr"],
+            "unknown option `--tree`",
+        ),
         (
             &["debug", "tokens", "--verbose", "a.pgr"],
             "unknown option `--verbose`",
@@ -182,6 +192,11 @@ fn command_line_errors_honor_the_json_format() {
             ],
             2,
             "`debug tokens` accepts exactly one file",
+        ),
+        (
+            &["debug", "ast", "--diagnostic-format=json"],
+            2,
+            "missing source file for `debug ast`",
         ),
         (
             &[
@@ -290,6 +305,81 @@ error: aborting due to 2 previous errors
 }
 
 #[test]
+fn debug_ast_prints_the_tree_of_a_valid_file() {
+    let output = pinguer(&["debug", "ast", "hello.pgr"]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(output.stderr.is_empty());
+    let expected = "\
+File @1:1-6:1 nodes=8
+  Import #0 @1:1-1:14 std.io
+  Func #1 @3:1-5:2 main
+    Block #2 @3:13-5:2
+      ExprStmt #3 @4:5-4:34
+        Call #4 @4:5-4:34
+          Member #5 @4:5-4:15 .println
+            Name #6 @4:5-4:7 io
+          String #7 @4:16-4:33 \"Hello, Pinguer!\"
+";
+    assert_eq!(stdout(&output), expected);
+}
+
+#[test]
+fn debug_ast_reports_syntax_errors_and_prints_the_recovered_tree() {
+    let output = pinguer(&["debug", "ast", "syntax_errors.pgr"]);
+    assert_eq!(output.status.code(), Some(1));
+    let text = stderr(&output);
+    assert!(
+        text.starts_with("error[P2002]: expected identifier, found `=`\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("error[P2008]: expected `)` to close `(`, found `}`\n"),
+        "{text}"
+    );
+    assert!(
+        text.ends_with("error: aborting due to 2 previous errors\n"),
+        "{text}"
+    );
+    // The broken statement is an error node; the next one is still parsed.
+    let tree = stdout(&output);
+    assert!(tree.contains("      ErrorStmt #2 @2:5-"), "{tree}");
+    assert!(tree.contains("        Call #4 @3:5-3:20\n"), "{tree}");
+}
+
+#[test]
+fn debug_ast_emits_json_diagnostics() {
+    let output = pinguer(&[
+        "debug",
+        "ast",
+        "syntax_errors.pgr",
+        "--diagnostic-format=json",
+    ]);
+    assert_eq!(output.status.code(), Some(1));
+    let text = stderr(&output);
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.len(), 2, "{text}");
+    assert!(lines[0].contains(r#""code":"P2002""#), "{text}");
+    assert!(lines[1].contains(r#""code":"P2008""#), "{text}");
+    assert!(stdout(&output).starts_with("File @1:1-5:1 nodes=8\n"));
+}
+
+#[test]
+fn debug_ast_survives_deep_nesting() {
+    let dir = TempDir::new("deep-nesting");
+    let text = format!("const X = {}1{}\n", "(".repeat(10_000), ")".repeat(10_000));
+    let path = dir.file("deep.pgr", text.as_bytes());
+    let output = pinguer(&["debug", "ast", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    let text = stderr(&output);
+    assert_eq!(text.matches("error[P2019]").count(), 1, "{text}");
+    assert!(
+        text.ends_with("error: aborting due to 1 previous error\n"),
+        "{text}"
+    );
+    assert!(stdout(&output).contains("  ErrorItem #0 @1:1-"));
+}
+
+#[test]
 fn debug_tokens_emits_json_diagnostics() {
     let output = pinguer(&[
         "debug",
@@ -378,6 +468,30 @@ fn closed_standard_output_is_not_an_error() {
         .unwrap();
     // The reader is dropped here, closing the pipe like `| head -1`.
     assert_eq!(first, "1:1\tKeyword(Let)\t\"let\"\n");
+    let output = child.wait_with_output().unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stderr.is_empty(), "{}", stderr(&output));
+}
+
+#[test]
+fn closed_standard_output_stops_the_tree() {
+    use std::io::{BufRead, BufReader};
+    use std::process::Stdio;
+
+    let dir = TempDir::new("closed-stdout-ast");
+    let text = format!("func f() {{\n{}}}\n", "g()\n".repeat(200_000));
+    let path = dir.file("many.pgr", text.as_bytes());
+    let mut child = Command::new(env!("CARGO_BIN_EXE_pinguer"))
+        .args(["debug", "ast", path.to_str().unwrap()])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to run the pinguer executable");
+    let mut first = String::new();
+    BufReader::new(child.stdout.take().unwrap())
+        .read_line(&mut first)
+        .unwrap();
+    assert_eq!(first, "File @1:1-200003:1 nodes=600002\n");
     let output = child.wait_with_output().unwrap();
     assert_eq!(output.status.code(), Some(0));
     assert!(output.stderr.is_empty(), "{}", stderr(&output));

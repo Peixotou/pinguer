@@ -13,8 +13,10 @@ dependencies = [
 name = "pinguer_cli"
 version = "0.1.0-dev"
 dependencies = [
+ "pinguer_ast",
  "pinguer_diagnostics",
  "pinguer_lexer",
+ "pinguer_parser",
  "pinguer_source",
 ]
 

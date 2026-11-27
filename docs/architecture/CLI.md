@@ -10,6 +10,7 @@ Decision record: [ADR-0010](../adr/0010-cli-exposes-only-implemented-commands.md
 | `pinguer help`, `pinguer --help`, `pinguer -h`, `pinguer` | Print usage. |
 | `pinguer version`, `pinguer --version`, `pinguer -V` | Print `pinguer 0.1.0-dev`. |
 | `pinguer debug tokens <file> [--diagnostic-format human\|json]` | Print the token stream of a file, one token per line, followed by any diagnostics. For compiler development; the output format is **not stable**. |
+| `pinguer debug ast <file> [--diagnostic-format human\|json]` | Print the syntax tree of a file, one node per line, followed by any diagnostics. For compiler development; the output format is **not stable**. |
 
 `debug tokens` output, one line per token, tab-separated:
 
@@ -20,6 +21,23 @@ Decision record: [ADR-0010](../adr/0010-cli-exposes-only-implemented-commands.md
 
 The columns are the start position (`line:column`), the token kind and the
 token text as a quoted, escaped string.
+
+`debug ast` output, one line per node, children indented by two spaces:
+
+```text
+File @1:1-6:1 nodes=8
+  Import #0 @1:1-1:14 std.io
+  Func #1 @3:1-5:2 main
+    Block #2 @3:13-5:2
+```
+
+Each line holds the node kind, its ID, its span as
+`@line:column-line:column` (the end just past the node) and its data. String
+and character values are quoted and escaped. Operators of a chain are lines
+of their own between the operands, without an ID; error nodes are
+`ErrorItem`, `ErrorStmt`, `ErrorExpr` and `ErrorType`. The tree is printed
+even when the file has errors, so that error recovery can be inspected, and
+the exit status is then 1.
 
 ## 2. Planned commands
 
