@@ -24,7 +24,7 @@ impl Parser<'_> {
     /// next one.
     fn binary(&mut self, min: u8) -> PResult<ast::Expr> {
         let start = self.start();
-        let mut left = self.unary()?;
+        let mut left = self.cast()?;
         while let Some((_, level)) = binary_op(self.cursor.kind()) {
             if level < min {
                 break;
@@ -73,6 +73,28 @@ impl Parser<'_> {
                      `a < b && b < c`, so write each comparison separately",
                 ),
         )
+    }
+
+    /// `CastExpr = UnaryExpr , { "as" , Type }`
+    ///
+    /// `as` binds less tightly than the prefix operators, so `-x as T`
+    /// converts `-x`, and its right operand is a type.
+    fn cast(&mut self) -> PResult<ast::Expr> {
+        let start = self.start();
+        let mut expr = self.unary()?;
+        while self.cursor.at(TokenKind::Keyword(Keyword::As)) {
+            self.cursor.bump();
+            let ty = self.ty()?;
+            expr = ast::Expr {
+                id: PENDING,
+                span: self.span_from(start),
+                kind: ast::ExprKind::Cast {
+                    operand: Box::new(expr),
+                    ty,
+                },
+            };
+        }
+        Ok(expr)
     }
 
     /// `UnaryExpr = ( "-" | "!" | "~" ) , UnaryExpr | PostfixExpr`

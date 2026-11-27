@@ -656,3 +656,34 @@ mod logical_expr {
         );
     }
 }
+
+/// `CastExpr = UnaryExpr , { "as" , Type }`
+mod cast_expr {
+    use super::*;
+
+    #[test]
+    fn converts_to_a_type() {
+        assert_eq!(shape("x as i32"), "(as x i32)");
+        assert_eq!(shape("x as f64 as f32"), "(as (as x f64) f32)");
+        assert_eq!(shape("x as ()"), "(as x ())");
+    }
+
+    #[test]
+    fn binds_between_prefix_and_multiplicative_operators() {
+        assert_eq!(shape("-x as i32"), "(as (- x) i32)");
+        assert_eq!(shape("x as int * 2"), "((as x int) * 2)");
+        assert_eq!(shape("a + b as int"), "(a + (as b int))");
+        assert_eq!(shape("(a + b) as int"), "(as (paren (a + b)) int)");
+    }
+
+    #[test]
+    fn the_right_operand_is_a_type() {
+        assert_eq!(shape("x as\n    u8"), "(as x u8)");
+        for (text, message) in [
+            ("const X = x as", "expected type, found end of file"),
+            ("const X = x as 1", "expected type, found integer literal"),
+        ] {
+            assert_eq!(parse(text).messages, [message], "{text}");
+        }
+    }
+}
