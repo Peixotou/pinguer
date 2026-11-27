@@ -135,6 +135,8 @@ define_codes! {
     /// Syntax of a planned feature, such as `**` or `[`, which v0.1 does
     /// not support.
     UNSUPPORTED_SYNTAX = 2010, "syntax not supported in this version";
+    /// A function parameter without `: Type`.
+    MISSING_PARAMETER_TYPE = 2011, "parameter without a type";
 }
 
 #[cfg(test)]

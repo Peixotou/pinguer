@@ -2,7 +2,7 @@
 
 use pinguer_ast as ast;
 use pinguer_diagnostics::{Diagnostic, codes};
-use pinguer_lexer::{Keyword, TokenKind};
+use pinguer_lexer::{Keyword, Token, TokenKind};
 use pinguer_source::Span;
 
 use crate::ids::PENDING;
@@ -41,6 +41,7 @@ impl Parser<'_> {
         let start = self.start();
         let kind = match self.cursor.kind() {
             TokenKind::Keyword(Keyword::Import) => self.import(),
+            TokenKind::Keyword(Keyword::Func) => self.func(),
             TokenKind::Keyword(Keyword::Const) => self
                 .binding(ast::BindingKind::Const)
                 .map(ast::ItemKind::Const),
@@ -75,6 +76,70 @@ impl Parser<'_> {
             path.push(self.ident()?);
         }
         Ok(ast::ItemKind::Import(ast::Import { path }))
+    }
+
+    /// `FuncDecl = "func" , IDENT , "(" , [ ParamList ] , ")" , [ "->" ,
+    /// Type ] , Block`
+    fn func(&mut self) -> PResult<ast::ItemKind> {
+        self.cursor.bump();
+        let name = self.ident()?;
+        let open = self.expect(TokenKind::LParen)?;
+        let params = self.params(open)?;
+        let ret = if self.cursor.at(TokenKind::Arrow) {
+            self.cursor.bump();
+            Some(self.ty()?)
+        } else {
+            None
+        };
+        let body = self.block()?;
+        Ok(ast::ItemKind::Func(ast::Func {
+            name,
+            params,
+            ret,
+            body,
+        }))
+    }
+
+    /// The rest of `"(" , [ ParamList ] , ")"` after `open`, with
+    /// `ParamList = Param , { "," , Param } , [ "," ]`.
+    fn params(&mut self, open: Token) -> PResult<Vec<ast::Param>> {
+        let mut params = Vec::new();
+        while !self.cursor.at(TokenKind::RParen) {
+            params.push(self.param()?);
+            if !self.cursor.at(TokenKind::Comma) {
+                break;
+            }
+            self.cursor.bump();
+        }
+        self.expect_closing(open, TokenKind::RParen)?;
+        Ok(params)
+    }
+
+    /// `Param = IDENT , ":" , Type`
+    fn param(&mut self) -> PResult<ast::Param> {
+        let start = self.start();
+        let name = self.ident()?;
+        if !self.cursor.at(TokenKind::Colon) {
+            let found = self.cursor.current();
+            return Err(self.error(
+                Diagnostic::error(format!(
+                    "expected `:` and the parameter's type, found {}",
+                    self.describe(found)
+                ))
+                .with_code(codes::MISSING_PARAMETER_TYPE)
+                .with_primary(found.span, "expected `:`")
+                .with_secondary(name.span, "this parameter has no type")
+                .with_note("parameter types are always written: `name: Type`"),
+            ));
+        }
+        self.cursor.bump();
+        let ty = self.ty()?;
+        Ok(ast::Param {
+            id: PENDING,
+            span: self.span_from(start),
+            name,
+            ty,
+        })
     }
 
     /// `ConstDecl = "const" , IDENT , [ ":" , Type ] , "=" , Expr`

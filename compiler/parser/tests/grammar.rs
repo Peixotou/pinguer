@@ -831,3 +831,109 @@ mod planned_syntax {
         );
     }
 }
+
+/// `FuncDecl = "func" , IDENT , "(" , [ ParamList ] , ")" , [ "->" , Type ] , Block`
+mod func_decl {
+    use super::*;
+
+    #[test]
+    fn hello_world() {
+        let expected = concat!(
+            "  Import #0 @1:1-1:14 std.io\n",
+            "  Func #1 @3:1-5:2 main\n",
+            "    Block #2 @3:13-5:2\n",
+            "      ExprStmt #3 @4:5-4:24\n",
+            "        Call #4 @4:5-4:24\n",
+            "          Member #5 @4:5-4:15 .println\n",
+            "            Name #6 @4:5-4:7 io\n",
+            "          String #7 @4:16-4:23 \"Hello\"\n",
+        );
+        let text = "import std.io\n\nfunc main() {\n    io.println(\"Hello\")\n}\n";
+        assert_eq!(tree(text), expected);
+    }
+
+    #[test]
+    fn parameters_and_return_type() {
+        let expected = [
+            "  Func #0 @1:1-1:38 add",
+            "    Param #1 @1:10-1:16 a",
+            "      Type #2 @1:13-1:16 int",
+            "    Param #3 @1:18-1:24 b",
+            "      Type #4 @1:21-1:24 int",
+            "    Type #5 @1:29-1:32 int",
+            "    Block #6 @1:33-1:38",
+            "      ExprStmt #7 @1:35-1:36",
+            "        Name #8 @1:35-1:36 a",
+        ];
+        let tree = tree("func add(a: int, b: int) -> int { a }");
+        assert_eq!(tree.lines().collect::<Vec<_>>(), expected);
+    }
+
+    #[test]
+    fn signatures_may_span_lines() {
+        let text = "func f(\n    a: int,\n    b: int,\n) ->\n    int {\n}";
+        let tree = tree(text);
+        assert_eq!(tree.matches("Param").count(), 2, "{tree}");
+        assert!(tree.contains("    Type #5 @5:5-5:8 int\n"), "{tree}");
+    }
+
+    #[test]
+    fn malformed_signatures() {
+        for (text, code, message) in [
+            ("func", "P2002", "expected identifier, found end of file"),
+            ("func f {}", "P2005", "expected `(`, found `{`"),
+            ("func f()", "P2005", "expected `{`, found end of file"),
+            ("func f() -> {}", "P2007", "expected type, found `{`"),
+            (
+                "func f(a) {}",
+                "P2011",
+                "expected `:` and the parameter's type, found `)`",
+            ),
+            ("func f(a: ) {}", "P2007", "expected type, found `)`"),
+            ("func f(,) {}", "P2002", "expected identifier, found `,`"),
+            (
+                "func f(a: int b: int) {}",
+                "P2008",
+                "expected `)` to close `(`, found identifier `b`",
+            ),
+        ] {
+            let parsed = parse(text);
+            assert_eq!(parsed.codes, [code], "{text}");
+            assert_eq!(parsed.messages, [message], "{text}");
+        }
+    }
+}
+
+/// `Block = "{" , { Separator } , [ Statement , { Separator , { Separator } ,
+/// Statement } , { Separator } ] , "}"`
+mod block {
+    use super::*;
+
+    #[test]
+    fn statements_are_separated_by_line_breaks_or_semicolons() {
+        let body = tree("func f() {\n\n    a(); b()\n    c()\n\n}");
+        assert_eq!(body.matches("ExprStmt").count(), 3, "{body}");
+        assert!(tree("func f() {}").ends_with("    Block #1 @1:10-1:12\n"));
+        assert!(tree("func f() { ; ; }").ends_with("    Block #1 @1:10-1:17\n"));
+    }
+
+    #[test]
+    fn statements_on_one_line_need_a_semicolon() {
+        let parsed = parse("func f() { a() b() }");
+        assert_eq!(parsed.codes, ["P2003"]);
+        assert_eq!(
+            parsed.messages,
+            ["expected a line break or `;` after the statement, found identifier `b`"]
+        );
+    }
+
+    #[test]
+    fn an_unclosed_block_points_at_its_brace() {
+        let parsed = parse("func f() {\n    a()\n");
+        assert_eq!(parsed.codes, ["P2008"]);
+        assert_eq!(
+            parsed.messages,
+            ["expected `}` to close `{`, found end of file"]
+        );
+    }
+}

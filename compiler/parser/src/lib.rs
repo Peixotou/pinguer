@@ -13,6 +13,7 @@ mod ids;
 mod item;
 mod literal;
 mod newline;
+mod stmt;
 mod ty;
 
 use pinguer_ast as ast;
