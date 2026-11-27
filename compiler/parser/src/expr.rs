@@ -82,8 +82,9 @@ impl Parser<'_> {
         self.unsupported_syntax(what)
     }
 
-    /// Reports the current token as part of `what`, syntax that later
-    /// versions add.
+    /// Reports the current token as part of `what`, syntax that v0.1 does
+    /// not have but a later version may add: planned and proposed features
+    /// alike (FEATURE_MATRIX.md).
     pub(crate) fn unsupported_syntax(&mut self, what: &str) -> Reported {
         let found = self.cursor.current();
         self.error(
@@ -91,7 +92,8 @@ impl Parser<'_> {
                 .with_code(codes::UNSUPPORTED_SYNTAX)
                 .with_primary(found.span, "not supported in v0.1")
                 .with_note(
-                    "it is planned for a later version; see specifications/FEATURE_MATRIX.md",
+                    "a later version may add it; see specifications/FEATURE_MATRIX.md for its \
+                     status",
                 ),
         )
     }

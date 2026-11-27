@@ -839,7 +839,7 @@ mod planned_syntax {
         assert_eq!(parsed.labelled, ["**"]);
         assert_eq!(
             parsed.notes,
-            [["it is planned for a later version; see specifications/FEATURE_MATRIX.md"]]
+            [["a later version may add it; see specifications/FEATURE_MATRIX.md for its status"]]
         );
     }
 }
@@ -1886,7 +1886,7 @@ mod planned_syntax_outside_expressions {
     }
 
     #[test]
-    fn the_wildcard_is_planned_wherever_it_appears() {
+    fn the_wildcard_is_not_supported_wherever_it_appears() {
         for text in [
             "func f() {\n    let _ = g()\n}",
             "func f() {\n    _ = g()\n}",
@@ -1907,7 +1907,7 @@ mod generic_syntax {
     use super::*;
 
     #[test]
-    fn generic_parameter_and_type_argument_lists_are_planned() {
+    fn generic_parameter_and_type_argument_lists_are_not_supported() {
         for (text, message) in [
             (
                 "func identity<T>(value: T) -> T {\n    return value\n}",
