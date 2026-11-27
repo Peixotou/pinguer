@@ -229,3 +229,37 @@ fn long_lists_are_not_limited() {
         }
     });
 }
+
+/// Returns the depth of the tree of `text`: the largest indentation of its
+/// rendering, in levels.
+fn tree_depth(text: &str) -> usize {
+    let mut map = SourceMap::new();
+    let file = map.add("depth.pgr", text).unwrap();
+    let mut diagnostics = Diagnostics::new();
+    let tokens = pinguer_lexer::tokenize(file, text, &mut diagnostics);
+    let tree = pinguer_parser::parse(file, text, tokens, &mut diagnostics);
+    pinguer_ast::render_to_string(&tree, map.file(file))
+        .lines()
+        .map(|line| (line.len() - line.trim_start().len()) / 2)
+        .max()
+        .unwrap()
+}
+
+/// What the limit bounds is the depth of the tree, which recursive passes
+/// and destruction recurse through: at most three lines per level, as a
+/// statement, an `if` branch and its block take, plus the file, the item
+/// and a leaf.
+#[test]
+fn the_nesting_limit_bounds_the_depth_of_the_tree() {
+    let bound = 3 * MAX_NESTING as usize + 4;
+    on_small_stack(move || {
+        for kind in KINDS {
+            for levels in [MAX_NESTING as usize, 10_000] {
+                let depth = tree_depth(&nested(kind, levels));
+                assert!(depth <= bound, "{kind} at {levels} levels: {depth}");
+            }
+        }
+        // Parentheses take one line per level.
+        assert_eq!(tree_depth(&nested("parentheses", 256)), 256 + 2);
+    });
+}

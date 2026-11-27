@@ -88,23 +88,80 @@ fn parse(text: &str) -> Outcome {
     }
 }
 
+/// Parses a rendered span, `@2:5-2:16`.
+fn span(word: &str) -> (Position, Position) {
+    let number = |text: &str| text.parse::<u32>().unwrap();
+    let (start, end) = word.strip_prefix('@').unwrap().split_once('-').unwrap();
+    let (start_line, start_column) = start.split_once(':').unwrap();
+    let (end_line, end_column) = end.split_once(':').unwrap();
+    (
+        (number(start_line), number(start_column)),
+        (number(end_line), number(end_column)),
+    )
+}
+
+/// Returns the nesting depth and span of every line of `rendered`. A line
+/// is `Kind [#id] @span [data]`; operator, branch and `else` lines have no
+/// ID.
+fn lines(rendered: &str) -> Vec<(usize, (Position, Position))> {
+    rendered
+        .lines()
+        .map(|line| {
+            let depth = (line.len() - line.trim_start().len()) / 2;
+            let mut words = line.split_whitespace().skip(1);
+            let word = words
+                .next()
+                .filter(|word| word.starts_with('@'))
+                .or_else(|| words.next())
+                .unwrap();
+            (depth, span(word))
+        })
+        .collect()
+}
+
+/// Checks that the span of every node lies within its parent's, after the
+/// spans of its previous siblings, and that the tree is no deeper than the
+/// nesting limit allows: each counted level adds at most three lines, as a
+/// statement, an `if` branch and its block do (ADR-0030).
+fn check_structure(rendered: &str, context: &dyn Fn() -> String) {
+    // Each entry: depth, span, end of the last child seen.
+    let mut ancestors: Vec<(usize, (Position, Position), Option<Position>)> = Vec::new();
+    for (depth, (start, end)) in lines(rendered) {
+        assert!(start <= end, "{start:?}-{end:?}: {}", context());
+        assert!(
+            depth <= 3 * pinguer_parser::MAX_NESTING as usize + 4,
+            "depth {depth}: {}",
+            context()
+        );
+        while ancestors.last().is_some_and(|&(d, ..)| d >= depth) {
+            ancestors.pop();
+        }
+        if let Some((_, (parent_start, parent_end), last_child)) = ancestors.last_mut() {
+            assert!(
+                *parent_start <= start && end <= *parent_end,
+                "{start:?}-{end:?} outside its parent {parent_start:?}-{parent_end:?}: {}\n{rendered}",
+                context()
+            );
+            if let Some(previous) = last_child {
+                assert!(
+                    *previous <= start,
+                    "{start:?} before the end of its previous sibling {previous:?}: {}\n{rendered}",
+                    context()
+                );
+            }
+            *last_child = Some(end);
+        }
+        ancestors.push((depth, (start, end), None));
+    }
+}
+
 /// Returns the span of every error node in `rendered`, whose lines read
 /// `ErrorStmt #3 @2:5-2:16`.
 fn error_nodes(rendered: &str) -> Vec<(Position, Position)> {
-    let number = |text: &str| text.parse::<u32>().unwrap();
     rendered
         .lines()
         .filter(|line| line.trim_start().starts_with("Error"))
-        .map(|line| {
-            let span = line.split_whitespace().nth(2).unwrap();
-            let (start, end) = span.strip_prefix('@').unwrap().split_once('-').unwrap();
-            let (start_line, start_column) = start.split_once(':').unwrap();
-            let (end_line, end_column) = end.split_once(':').unwrap();
-            (
-                (number(start_line), number(start_column)),
-                (number(end_line), number(end_column)),
-            )
-        })
+        .map(|line| span(line.split_whitespace().nth(2).unwrap()))
         .collect()
 }
 
@@ -154,6 +211,8 @@ fn check(text: &str, context: &dyn Fn() -> String) -> Outcome {
             context()
         );
     }
+
+    check_structure(&outcome.rendered, context);
 
     // Parsing is deterministic.
     let again = parse(text);
