@@ -143,6 +143,8 @@ define_codes! {
     INVALID_ASSIGNMENT_TARGET = 2013, "invalid assignment target";
     /// A `{` on the line after the construct it belongs to.
     BRACE_ON_NEXT_LINE = 2014, "`{` on the next line";
+    /// An `else` on the line after the `}` of its `if`.
+    ELSE_ON_NEXT_LINE = 2015, "`else` on the next line";
 }
 
 #[cfg(test)]

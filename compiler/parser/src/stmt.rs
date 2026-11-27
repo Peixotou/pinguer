@@ -112,6 +112,7 @@ impl Parser<'_> {
                 cond,
                 block,
             });
+            self.else_on_next_line();
             if !self.cursor.at(TokenKind::Keyword(Keyword::Else)) {
                 break;
             }
@@ -125,6 +126,26 @@ impl Parser<'_> {
             branches,
             else_block,
         }))
+    }
+
+    /// Layout rule: `else` is on the same line as the `}` before it.
+    /// Otherwise the `if` statement has ended and `else` cannot start a
+    /// statement; after reporting it, parse the `else` as if it were in
+    /// place.
+    fn else_on_next_line(&mut self) {
+        if self.cursor.at(TokenKind::Newline)
+            && self.cursor.peek(1) == TokenKind::Keyword(Keyword::Else)
+        {
+            self.cursor.bump();
+            let keyword = self.cursor.current();
+            self.error(
+                Diagnostic::error("`else` must be on the same line as the `}` before it")
+                    .with_code(codes::ELSE_ON_NEXT_LINE)
+                    .with_primary(keyword.span, "this `else` starts a new line")
+                    .with_note("a line break after `}` ends the `if` statement")
+                    .with_help("write `} else` on one line"),
+            );
+        }
     }
 
     /// `WhileStatement = "while" , Expr , Block`

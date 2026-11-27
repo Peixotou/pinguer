@@ -1289,3 +1289,23 @@ mod brace_placement {
         assert!(parsed.tree.contains("ExprStmt"), "{}", parsed.tree);
     }
 }
+
+/// Layout rule of GRAMMAR.ebnf: `else` must be on the same line as the
+/// preceding `}`.
+mod else_placement {
+    use super::*;
+
+    #[test]
+    fn else_on_the_next_line_is_reported_once() {
+        for text in [
+            "func f() {\n    if a {\n    }\n    else {\n    }\n}",
+            "func f() {\n    if a {\n    }\n\n    // comment\n    else if b {\n    }\n}",
+        ] {
+            let parsed = parse(text);
+            assert_eq!(parsed.codes, ["P2015"], "{text}");
+            assert_eq!(parsed.labelled, ["else"], "{text}");
+            // The `else` still belongs to the `if`.
+            assert!(parsed.tree.contains("Else") || parsed.tree.matches("Branch").count() == 2);
+        }
+    }
+}
