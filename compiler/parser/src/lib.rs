@@ -164,8 +164,19 @@ impl Parser<'_> {
         self.error(diagnostic)
     }
 
+    /// Reports `diagnostic`, unless it blames an [`TokenKind::Unknown`]
+    /// token: the lexer has reported that token already, and a second
+    /// diagnostic would only repeat it (ADR-0029). Either way the caller
+    /// recovers as from a reported error.
     fn error(&mut self, diagnostic: Diagnostic) -> Reported {
-        self.diagnostics.push(diagnostic);
+        let current = self.cursor.current();
+        let blames_unknown = current.kind == TokenKind::Unknown
+            && diagnostic
+                .main_label()
+                .is_some_and(|label| label.span == current.span);
+        if !blames_unknown {
+            self.diagnostics.push(diagnostic);
+        }
         Reported
     }
 

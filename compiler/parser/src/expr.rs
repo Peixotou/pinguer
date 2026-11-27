@@ -191,8 +191,9 @@ impl Parser<'_> {
     /// `PrimaryExpr = INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | CHAR_LITERAL
     /// | "true" | "false" | IDENT | "(" , Expr , ")"`
     ///
-    /// A literal the lexer reported as malformed becomes an error
-    /// expression without a second diagnostic.
+    /// A literal the lexer reported as malformed, and a token the lexer
+    /// could not recognise, become an error expression without a second
+    /// diagnostic.
     fn primary(&mut self) -> PResult<ast::Expr> {
         let start = self.start();
         let kind = match self.cursor.kind() {
@@ -236,6 +237,10 @@ impl Parser<'_> {
                 let inner = self.expr()?;
                 self.expect_closing(open, TokenKind::RParen)?;
                 ast::ExprKind::Paren(Box::new(inner))
+            }
+            TokenKind::Unknown => {
+                self.cursor.bump();
+                ast::ExprKind::Error
             }
             kind if planned_syntax(kind).is_some() => return Err(self.unsupported()),
             _ => {

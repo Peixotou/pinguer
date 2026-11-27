@@ -1450,3 +1450,35 @@ mod item_recovery {
         assert_eq!(names(&parsed.tree), ["g"], "{}", parsed.tree);
     }
 }
+
+mod unknown_token_recovery {
+    use super::*;
+
+    #[test]
+    fn an_unknown_token_is_an_error_expression() {
+        let parsed = parse("const X = $\nconst Y = 1 + $");
+        assert_eq!(parsed.codes, ["P1001", "P1001"]);
+        assert_eq!(
+            parsed.tree.matches("ErrorExpr").count(),
+            2,
+            "{}",
+            parsed.tree
+        );
+    }
+
+    #[test]
+    fn errors_at_an_unknown_token_are_not_reported_again() {
+        let text = "$ func\nfunc f() {\n    let $ = 1\n    a $ b\n    g()\n}\nfunc h($) {\n}";
+        let parsed = parse(text);
+        assert_eq!(parsed.codes, ["P1001"; 4], "{:?}", parsed.messages);
+        for (node, count) in [("ErrorItem", 2), ("ErrorStmt", 1), ("ExprStmt", 2)] {
+            assert_eq!(parsed.tree.matches(node).count(), count, "{}", parsed.tree);
+        }
+    }
+
+    #[test]
+    fn errors_about_other_code_are_still_reported() {
+        let parsed = parse("func f() {\n    -x $\n}");
+        assert_eq!(parsed.codes, ["P1001", "P2012"]);
+    }
+}
