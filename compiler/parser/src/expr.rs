@@ -4,7 +4,7 @@ use pinguer_ast as ast;
 use pinguer_diagnostics::{Diagnostic, codes};
 use pinguer_lexer::TokenKind;
 
-use crate::{PResult, Parser};
+use crate::{PResult, Parser, literal};
 
 impl Parser<'_> {
     /// `Expr = OrExpr`
@@ -12,11 +12,23 @@ impl Parser<'_> {
         self.primary()
     }
 
-    /// `PrimaryExpr = … | IDENT | …`
+    /// `PrimaryExpr = INT_LITERAL | … | IDENT | …`
+    ///
+    /// A literal the lexer reported as malformed becomes an error
+    /// expression without a second diagnostic.
     fn primary(&mut self) -> PResult<ast::Expr> {
         let id = self.next_id();
         let start = self.start();
         let kind = match self.cursor.kind() {
+            TokenKind::Int => {
+                let token = self.cursor.bump();
+                match literal::decode_int(&self.text[token.span.range()]) {
+                    Some((value, base)) => {
+                        ast::ExprKind::Literal(ast::Literal::Int { value, base })
+                    }
+                    None => ast::ExprKind::Error,
+                }
+            }
             TokenKind::Ident => ast::ExprKind::Name(self.ident()?),
             _ => {
                 let found = self.cursor.current();

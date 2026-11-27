@@ -221,3 +221,47 @@ mod ty {
         }
     }
 }
+
+/// `PrimaryExpr = INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | CHAR_LITERAL
+/// | "true" | "false" | IDENT | "(" , Expr , ")"`
+mod primary_expr {
+    use super::*;
+
+    /// The rendered initializer of `const X = <expression>`.
+    pub(crate) fn value(expression: &str) -> String {
+        let tree = tree(&format!("const X = {expression}"));
+        let (_, value) = tree.split_once('\n').unwrap();
+        value.to_owned()
+    }
+
+    #[test]
+    fn integer_literals_keep_their_value_and_base() {
+        assert_eq!(value("1_000"), "    Int #1 @1:11-1:16 1000 decimal\n");
+        assert_eq!(value("0xFF"), "    Int #1 @1:11-1:15 255 hexadecimal\n");
+        assert_eq!(value("0o17"), "    Int #1 @1:11-1:15 15 octal\n");
+        assert_eq!(value("0b1010"), "    Int #1 @1:11-1:17 10 binary\n");
+        // Wider than any v0.1 type, but kept exactly for the type checker.
+        assert_eq!(
+            value("18446744073709551616"),
+            "    Int #1 @1:11-1:31 18446744073709551616 decimal\n"
+        );
+        assert_eq!(
+            value(&"9".repeat(40)),
+            "    Int #1 @1:11-1:51 more-than-128-bits decimal\n"
+        );
+    }
+
+    #[test]
+    fn malformed_integer_literals_are_reported_once_by_the_lexer() {
+        for (text, code) in [
+            ("0b12", "P1006"),
+            ("007", "P1007"),
+            ("10u8", "P1006"),
+            ("0X1F", "P1006"),
+        ] {
+            let parsed = parse(&format!("const X = {text}"));
+            assert_eq!(parsed.codes, [code], "{text}");
+            assert!(parsed.tree.contains("    ErrorExpr #1 @1:11-"), "{text}");
+        }
+    }
+}
