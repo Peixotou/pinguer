@@ -147,6 +147,8 @@ define_codes! {
     ELSE_ON_NEXT_LINE = 2015, "`else` on the next line";
     /// A closing delimiter without a matching opening one.
     UNEXPECTED_CLOSING_DELIMITER = 2016, "closing delimiter without an opening one";
+    /// A keyword reserved for a later version, such as `for` or `struct`.
+    RESERVED_KEYWORD = 2017, "keyword reserved for a future version";
 }
 
 #[cfg(test)]

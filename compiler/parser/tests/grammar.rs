@@ -1516,3 +1516,66 @@ mod unexpected_closing_delimiter {
         );
     }
 }
+
+mod reserved_keyword {
+    use super::*;
+
+    /// The keywords that LEXICAL_STRUCTURE.md §5.2 reserves for future use.
+    const RESERVED: [&str; 27] = [
+        "actor",
+        "async",
+        "await",
+        "class",
+        "comptime",
+        "defer",
+        "enum",
+        "extern",
+        "for",
+        "impl",
+        "in",
+        "interface",
+        "loop",
+        "match",
+        "move",
+        "private",
+        "public",
+        "self",
+        "Self",
+        "spawn",
+        "static",
+        "struct",
+        "try",
+        "type",
+        "unsafe",
+        "where",
+        "yield",
+    ];
+
+    #[test]
+    fn reserved_keywords_are_not_names() {
+        for keyword in RESERVED {
+            let parsed = parse(&format!("const {keyword} = 1"));
+            assert_eq!(parsed.codes, ["P2017"], "{keyword}");
+            assert_eq!(
+                parsed.messages,
+                [format!(
+                    "`{keyword}` is reserved for a future version of Pinguer"
+                )]
+            );
+            assert_eq!(parsed.labelled, [keyword]);
+        }
+    }
+
+    #[test]
+    fn reserved_keywords_start_no_item_statement_type_or_expression() {
+        for text in [
+            "struct S {\n    x: int\n}",
+            "func f() {\n    for x in y {\n        g()\n    }\n}",
+            "func f(x: type) {\n}",
+            "const X = 1 + await",
+            "func f() {\n    let x = 1 in y\n}",
+        ] {
+            assert_eq!(parse(text).codes, ["P2017"], "{text:?}");
+        }
+    }
+}

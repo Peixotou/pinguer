@@ -178,18 +178,40 @@ impl Parser<'_> {
         )
     }
 
-    /// Reports `diagnostic`, unless it blames an [`TokenKind::Unknown`]
-    /// token: the lexer has reported that token already, and a second
-    /// diagnostic would only repeat it (ADR-0029). Either way the caller
-    /// recovers as from a reported error.
+    /// Reports `diagnostic`. Either way the caller recovers as from a
+    /// reported error.
+    ///
+    /// When the diagnostic blames the current token, the token itself may
+    /// be the cause:
+    ///
+    /// * An [`TokenKind::Unknown`] token was reported by the lexer, and a
+    ///   second diagnostic would only repeat it (ADR-0029); nothing is
+    ///   reported.
+    /// * A keyword reserved for a later version cannot be a name, start an
+    ///   expression or appear anywhere else in v0.1; the dedicated
+    ///   diagnostic that LEXICAL_STRUCTURE.md §5.2 requires replaces the one
+    ///   about what was expected.
     fn error(&mut self, diagnostic: Diagnostic) -> Reported {
         let current = self.cursor.current();
-        let blames_unknown = current.kind == TokenKind::Unknown
-            && diagnostic
-                .main_label()
-                .is_some_and(|label| label.span == current.span);
-        if !blames_unknown {
-            self.diagnostics.push(diagnostic);
+        let blames_current = diagnostic
+            .main_label()
+            .is_some_and(|label| label.span == current.span);
+        match current.kind {
+            TokenKind::Unknown if blames_current => {}
+            TokenKind::Keyword(keyword)
+                if blames_current && keyword.is_reserved_for_future_use() =>
+            {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "`{}` is reserved for a future version of Pinguer",
+                        keyword.as_str()
+                    ))
+                    .with_code(codes::RESERVED_KEYWORD)
+                    .with_primary(current.span, "reserved keyword")
+                    .with_note("it has no meaning in Pinguer v0.1 and cannot be used as a name"),
+                );
+            }
+            _ => self.diagnostics.push(diagnostic),
         }
         Reported
     }
