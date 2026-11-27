@@ -125,6 +125,8 @@ define_codes! {
     EXPECTED_TOKEN = 2005, "expected a different token";
     /// A `let`, `var` or `const` declaration without `=` and a value.
     MISSING_INITIALIZER = 2006, "declaration without an initializer";
+    /// A token that cannot start a type where one is required.
+    EXPECTED_TYPE = 2007, "expected type";
 }
 
 #[cfg(test)]

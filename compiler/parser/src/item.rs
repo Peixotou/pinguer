@@ -77,10 +77,16 @@ impl Parser<'_> {
         Ok(ast::ItemKind::Import(ast::Import { path }))
     }
 
-    /// `ConstDecl = "const" , IDENT , "=" , Expr`
+    /// `ConstDecl = "const" , IDENT , [ ":" , Type ] , "=" , Expr`
     pub(crate) fn binding(&mut self, kind: ast::BindingKind) -> PResult<ast::Binding> {
         let keyword = self.cursor.bump();
         let name = self.ident()?;
+        let ty = if self.cursor.at(TokenKind::Colon) {
+            self.cursor.bump();
+            Some(self.ty()?)
+        } else {
+            None
+        };
         if self.at_separator() || self.cursor.at(TokenKind::Eof) {
             let found = self.cursor.current();
             return Err(self.error(
@@ -99,7 +105,7 @@ impl Parser<'_> {
         Ok(ast::Binding {
             kind,
             name,
-            ty: None,
+            ty,
             value,
         })
     }

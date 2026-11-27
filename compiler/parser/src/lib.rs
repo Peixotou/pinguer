@@ -11,6 +11,7 @@ mod cursor;
 mod expr;
 mod item;
 mod newline;
+mod ty;
 
 use pinguer_ast as ast;
 use pinguer_diagnostics::{Diagnostic, Diagnostics, codes};

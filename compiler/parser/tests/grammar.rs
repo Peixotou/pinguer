@@ -175,4 +175,49 @@ mod const_decl {
             assert_eq!(parsed.messages, [message], "{text:?}");
         }
     }
+
+    #[test]
+    fn may_have_a_type_annotation() {
+        let expected = concat!(
+            "  Const #0 @1:1-1:17 X\n",
+            "    Type #1 @1:10-1:13 int\n",
+            "    Name #2 @1:16-1:17 y\n",
+        );
+        assert_eq!(tree("const X: int = y"), expected);
+    }
+}
+
+/// `Type = IDENT | UnitType`, `UnitType = "(" , ")"`
+mod ty {
+    use super::*;
+
+    #[test]
+    fn names_and_the_unit_type() {
+        assert!(tree("const X: string = y").contains("    Type #1 @1:10-1:16 string\n"));
+        assert!(tree("const X: () = y").contains("    Type #1 @1:10-1:12 ()\n"));
+        // Whitespace inside `()` is allowed: they are two tokens.
+        assert!(tree("const X: ( ) = y").contains("    Type #1 @1:10-1:13 ()\n"));
+    }
+
+    #[test]
+    fn other_tokens_are_not_types() {
+        for (text, code, message) in [
+            ("const X: = y", "P2007", "expected type, found `=`"),
+            ("const X:", "P2007", "expected type, found end of file"),
+            (
+                "const X: 1 = y",
+                "P2007",
+                "expected type, found integer literal",
+            ),
+            (
+                "const X: (int) = y",
+                "P2005",
+                "expected `)`, found identifier `int`",
+            ),
+        ] {
+            let parsed = parse(text);
+            assert_eq!(parsed.codes, [code], "{text:?}");
+            assert_eq!(parsed.messages, [message], "{text:?}");
+        }
+    }
 }
