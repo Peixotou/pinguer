@@ -101,8 +101,10 @@ pub struct Binding {
     pub kind: BindingKind,
     /// The declared name.
     pub name: Ident,
-    /// The type annotation, if one was written.
-    pub ty: Option<Type>,
+    /// The type annotation, if one was written. Boxed because local
+    /// bindings usually have none, and an inline type would enlarge every
+    /// statement.
+    pub ty: Option<Box<Type>>,
     /// The initializer.
     pub value: Expr,
 }
@@ -210,5 +212,14 @@ mod tests {
             .map(BindingKind::as_str)
             .collect();
         assert_eq!(keywords, ["let", "var", "const"]);
+    }
+
+    /// The sizes that the layout of statements was chosen for (ADR-0028).
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn statement_sizes() {
+        assert_eq!(size_of::<Stmt>(), 136);
+        assert_eq!(size_of::<Binding>(), 112);
+        assert_eq!(size_of::<Block>(), 32);
     }
 }

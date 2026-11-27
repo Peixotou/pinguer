@@ -203,7 +203,7 @@ impl Parser<'_> {
         let name = self.ident()?;
         let ty = if self.cursor.at(TokenKind::Colon) {
             self.cursor.bump();
-            Some(self.ty()?)
+            Some(Box::new(self.ty()?))
         } else {
             None
         };

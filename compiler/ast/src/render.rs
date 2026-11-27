@@ -373,7 +373,7 @@ mod tests {
             kind: ItemKind::Const(Binding {
                 kind: BindingKind::Const,
                 name: b.ident("MAX", 6),
-                ty: Some(const_ty),
+                ty: Some(Box::new(const_ty)),
                 value: const_value,
             }),
         };
@@ -585,7 +585,7 @@ File @1:1-1:81 nodes=29
                     kind: ItemKind::Const(Binding {
                         kind: BindingKind::Const,
                         name: b.ident("café", 3),
-                        ty: Some(b.ty(4, 5, TypeKind::Error)),
+                        ty: Some(Box::new(b.ty(4, 5, TypeKind::Error))),
                         value,
                     }),
                 },

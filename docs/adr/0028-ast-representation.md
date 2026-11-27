@@ -32,6 +32,12 @@ server will reuse it ([COMPILER_ARCHITECTURE.md §3.6](../architecture/COMPILER_
   which is rare. Together they reduced the tree by another 15–18% per node,
   without more allocations in code without conversions. A test checks the
   sizes.
+* Statements are 136 bytes. A binding boxes its type annotation, which local
+  bindings usually omit: per node, the tree of a realistic program without
+  annotations shrank by 12%, while one in which every binding is annotated
+  grew by 5%. Boxing the whole binding instead made statements smaller
+  still, but cost an allocation for every binding and enlarged programs
+  that declare variables, so it was not adopted.
 * Node kinds are enums over the v0.1 constructs only: items (`import`,
   function, constant), statements, expressions and types. Each kind exists
   because the grammar has it; nothing is added for planned features.
