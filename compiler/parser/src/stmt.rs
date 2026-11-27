@@ -26,6 +26,9 @@ impl Parser<'_> {
             );
         }
         let start = self.start();
+        if self.cursor.at(TokenKind::LBrace) {
+            self.enter()?;
+        }
         let open = self.expect(TokenKind::LBrace)?;
         let mut stmts = Vec::new();
         self.skip_separators();
@@ -48,6 +51,7 @@ impl Parser<'_> {
             }
             self.skip_separators();
         }
+        self.leave();
         self.expect_closing(open, TokenKind::RBrace)?;
         Ok(ast::Block {
             id: PENDING,
@@ -85,6 +89,9 @@ impl Parser<'_> {
     /// | Block`
     fn stmt(&mut self) -> ast::Stmt {
         let start = self.start();
+        // An error leaves the constructs that enclose it entered; they are
+        // discarded with the statement (ADR-0030).
+        let depth = self.depth;
         let kind = match self.cursor.kind() {
             TokenKind::Keyword(Keyword::Let) => self
                 .binding(ast::BindingKind::Let)
@@ -118,6 +125,7 @@ impl Parser<'_> {
             )),
             _ => self.expr_stmt(),
         };
+        self.depth = depth;
         ast::Stmt {
             id: PENDING,
             span: self.span_from(start),

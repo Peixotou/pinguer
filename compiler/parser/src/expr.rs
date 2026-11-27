@@ -24,6 +24,7 @@ impl Parser<'_> {
     /// next one.
     fn binary(&mut self, min: u8) -> PResult<ast::Expr> {
         let start = self.start();
+        let enclosing = self.open_chain();
         let mut left = self.cast()?;
         loop {
             if planned_syntax(self.cursor.kind()).is_some() {
@@ -35,6 +36,8 @@ impl Parser<'_> {
             if level < min {
                 break;
             }
+            self.wrap()?;
+            self.depth += 1;
             let mut rest = Vec::new();
             while let Some((op, precedence)) = binary_op(self.cursor.kind())
                 && precedence == level
@@ -52,6 +55,7 @@ impl Parser<'_> {
                     operand,
                 });
             }
+            self.depth -= 1;
             left = ast::Expr {
                 id: PENDING,
                 span: self.span_from(start),
@@ -61,6 +65,7 @@ impl Parser<'_> {
                 },
             };
         }
+        self.close_chain(enclosing);
         Ok(left)
     }
 
@@ -102,8 +107,10 @@ impl Parser<'_> {
     /// converts `-x`, and its right operand is a type.
     fn cast(&mut self) -> PResult<ast::Expr> {
         let start = self.start();
+        let enclosing = self.open_chain();
         let mut expr = self.unary()?;
         while self.cursor.at(TokenKind::Keyword(Keyword::As)) {
+            self.wrap()?;
             self.cursor.bump();
             let ty = self.ty()?;
             expr = ast::Expr {
@@ -115,6 +122,7 @@ impl Parser<'_> {
                 },
             };
         }
+        self.close_chain(enclosing);
         Ok(expr)
     }
 
@@ -127,8 +135,10 @@ impl Parser<'_> {
             _ => return self.postfix(),
         };
         let start = self.start();
+        self.enter()?;
         self.cursor.bump();
         let operand = self.unary()?;
+        self.leave();
         Ok(ast::Expr {
             id: PENDING,
             span: self.span_from(start),
@@ -142,12 +152,16 @@ impl Parser<'_> {
     /// `PostfixExpr = PrimaryExpr , { CallSuffix | MemberSuffix }`
     fn postfix(&mut self) -> PResult<ast::Expr> {
         let start = self.start();
+        let enclosing = self.open_chain();
         let mut expr = self.primary()?;
         loop {
             let kind = match self.cursor.kind() {
                 TokenKind::LParen => {
+                    self.wrap()?;
                     let open = self.cursor.bump();
+                    self.depth += 1;
                     let args = self.args(open)?;
+                    self.depth -= 1;
                     ast::ExprKind::Call {
                         callee: Box::new(expr),
                         args,
@@ -156,6 +170,7 @@ impl Parser<'_> {
                 // `MemberSuffix = "." , IDENT`. Whether the base is a
                 // module, as v0.1 requires, is checked by name resolution.
                 TokenKind::Dot => {
+                    self.wrap()?;
                     self.cursor.bump();
                     let name = self.ident()?;
                     ast::ExprKind::Member {
@@ -163,7 +178,10 @@ impl Parser<'_> {
                         name,
                     }
                 }
-                _ => return Ok(expr),
+                _ => {
+                    self.close_chain(enclosing);
+                    return Ok(expr);
+                }
             };
             expr = ast::Expr {
                 id: PENDING,
@@ -233,9 +251,11 @@ impl Parser<'_> {
             }
             TokenKind::Ident => ast::ExprKind::Name(self.ident()?),
             TokenKind::LParen => {
+                self.enter()?;
                 let open = self.cursor.bump();
                 let inner = self.expr()?;
                 self.expect_closing(open, TokenKind::RParen)?;
+                self.leave();
                 ast::ExprKind::Paren(Box::new(inner))
             }
             TokenKind::Unknown => {

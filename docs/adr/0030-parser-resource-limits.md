@@ -21,10 +21,18 @@ process has 1 MiB of stack; secondary threads elsewhere often have less.
   the levels of the tree it is building: blocks (including those of `if`,
   `while` and functions), parenthesized expressions, prefix operators,
   calls, member accesses, `as` conversions and operator chains. Going past
-  256 is an error (a dedicated `P2xxx` code); the parser skips the rest of
-  the offending construct, counting delimiters without recursion, replaces
-  it with an error node and continues. 256 matches Clang's default limit on
-  nested brackets; real programs stay far below it.
+  256 is an error (`P2019`); the parser skips the rest of the offending
+  construct, counting delimiters without recursion, replaces it with an
+  error node and continues. 256 matches Clang's default limit on nested
+  brackets; real programs stay far below it.
+* **Counting nodes that enclose earlier ones.** A call, member access,
+  conversion or operator chain encloses the nodes built before it in the
+  same chain: in `f(x)()()`, each later call adds a level above `x`. The
+  parser therefore measures the deepest level reached in a chain and adds
+  one to it for each such node, instead of counting only the constructs
+  that enclose the current position. Counting the position alone would
+  accept arguments nested 255 levels deep followed by 255 calls, at every
+  level of nesting, and so trees about 256²/2 levels deep.
 * **Operator chains are one level.** Binary operators of one precedence
   level form a single node with a list of operands
   ([ADR-0028](0028-ast-representation.md)), so `a + b + … + z` adds one

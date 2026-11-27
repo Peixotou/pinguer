@@ -12,6 +12,7 @@ mod expr;
 mod ids;
 mod item;
 mod literal;
+mod nesting;
 mod newline;
 mod stmt;
 mod ty;
@@ -22,6 +23,8 @@ use pinguer_lexer::{Token, TokenKind};
 use pinguer_source::{FileId, Span};
 
 use cursor::Cursor;
+
+pub use nesting::MAX_NESTING;
 
 /// Parses `tokens`, the result of [`pinguer_lexer::tokenize`] for `text`,
 /// which is the contents of `file`.
@@ -46,6 +49,8 @@ pub fn parse(
         text,
         file,
         diagnostics,
+        depth: 0,
+        deepest: 0,
     };
     let mut tree = parser.file(Span::new(file, 0, text_len));
     ids::number(&mut tree);
@@ -64,6 +69,12 @@ struct Parser<'a> {
     text: &'a str,
     file: FileId,
     diagnostics: &'a mut Diagnostics,
+    /// Number of counted constructs (ADR-0030) that enclose the position
+    /// being parsed.
+    depth: u32,
+    /// The deepest level reached in the chain being measured; see
+    /// [`Parser::open_chain`].
+    deepest: u32,
 }
 
 impl Parser<'_> {

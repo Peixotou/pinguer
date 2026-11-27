@@ -127,7 +127,7 @@ surrogate pair (`\udb40\udc41` for U+E0041), as RFC 8259 requires.
 |---|---|---|
 | P0001–P0999 | Driver, files | P0001–P0004 |
 | P1001–P1999 | Lexical analysis | P1001–P1012 |
-| P2001–P2999 | Syntax | P2001–P2018 |
+| P2001–P2999 | Syntax | P2001–P2019 |
 | P3001–P3999 | Name resolution | — |
 | P4001–P4999 | Types | — |
 | P5001–P5999 | Memory and ownership | — |

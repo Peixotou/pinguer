@@ -152,6 +152,8 @@ define_codes! {
     /// A declaration where it is not allowed, such as `func` inside a block
     /// or `let` at the top level.
     MISPLACED_DECLARATION = 2018, "declaration not allowed here";
+    /// Constructs nested deeper than the parser's limit.
+    NESTING_TOO_DEEP = 2019, "nesting exceeds the parser's limit";
 }
 
 #[cfg(test)]

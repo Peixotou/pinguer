@@ -75,6 +75,8 @@ impl Parser<'_> {
     /// `Item = ImportDecl | FuncDecl | ConstDecl`
     fn item(&mut self) -> ast::Item {
         let start = self.start();
+        // See `stmt`.
+        let depth = self.depth;
         let kind = match self.cursor.kind() {
             TokenKind::Keyword(Keyword::Import) => self.import(),
             TokenKind::Keyword(Keyword::Func) => self.func(),
@@ -88,6 +90,7 @@ impl Parser<'_> {
             kind if crate::is_closing_delimiter(kind) => Err(self.unexpected_closing_delimiter()),
             _ => Err(self.expected_item()),
         };
+        self.depth = depth;
         ast::Item {
             id: PENDING,
             span: self.span_from(start),
