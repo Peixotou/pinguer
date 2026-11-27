@@ -119,6 +119,25 @@ impl Parser<'_> {
         ))
     }
 
+    /// Consumes the delimiter that closes `open`, or reports that `open` is
+    /// not closed, pointing at both.
+    fn expect_closing(&mut self, open: Token, close: TokenKind) -> PResult<Token> {
+        if self.cursor.at(close) {
+            return Ok(self.cursor.bump());
+        }
+        let found = self.cursor.current();
+        Err(self.error(
+            Diagnostic::error(format!(
+                "expected {close} to close {}, found {}",
+                open.kind,
+                self.describe(found)
+            ))
+            .with_code(codes::UNCLOSED_DELIMITER)
+            .with_primary(found.span, format!("expected {close}"))
+            .with_secondary(open.span, "unclosed delimiter"),
+        ))
+    }
+
     /// Returns `true` at a `Separator = NEWLINE | ";"`.
     fn at_separator(&self) -> bool {
         matches!(

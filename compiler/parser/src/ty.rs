@@ -16,8 +16,8 @@ impl Parser<'_> {
         let kind = match self.cursor.kind() {
             TokenKind::Ident => ast::TypeKind::Name(self.ident()?),
             TokenKind::LParen => {
-                self.cursor.bump();
-                self.expect(TokenKind::RParen)?;
+                let open = self.cursor.bump();
+                self.expect_closing(open, TokenKind::RParen)?;
                 ast::TypeKind::Unit
             }
             _ => {

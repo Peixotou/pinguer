@@ -13,7 +13,7 @@ impl Parser<'_> {
     }
 
     /// `PrimaryExpr = INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | CHAR_LITERAL
-    /// | "true" | "false" | IDENT | …`
+    /// | "true" | "false" | IDENT | "(" , Expr , ")"`
     ///
     /// A literal the lexer reported as malformed becomes an error
     /// expression without a second diagnostic.
@@ -56,6 +56,12 @@ impl Parser<'_> {
                 ast::ExprKind::Literal(ast::Literal::Bool(keyword == Keyword::True))
             }
             TokenKind::Ident => ast::ExprKind::Name(self.ident()?),
+            TokenKind::LParen => {
+                let open = self.cursor.bump();
+                let inner = self.expr()?;
+                self.expect_closing(open, TokenKind::RParen)?;
+                ast::ExprKind::Paren(Box::new(inner))
+            }
             _ => {
                 let found = self.cursor.current();
                 return Err(self.error(

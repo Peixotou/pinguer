@@ -211,8 +211,8 @@ mod ty {
             ),
             (
                 "const X: (int) = y",
-                "P2005",
-                "expected `)`, found identifier `int`",
+                "P2008",
+                "expected `)` to close `(`, found identifier `int`",
             ),
         ] {
             let parsed = parse(text);
@@ -292,6 +292,34 @@ mod primary_expr {
         // Only the lowercase keywords are literals.
         assert_eq!(value("True"), "    Name #1 @1:11-1:15 True\n");
         assert_eq!(value("_count"), "    Name #1 @1:11-1:17 _count\n");
+    }
+
+    #[test]
+    fn parentheses_are_kept_in_the_tree() {
+        let expected = concat!(
+            "    Paren #1 @1:11-1:16\n",
+            "      Paren #2 @1:12-1:15\n",
+            "        Name #3 @1:13-1:14 a\n",
+        );
+        assert_eq!(value("((a))"), expected);
+        // Line breaks inside parentheses are not tokens at all.
+        assert!(value("(\n  a\n)").starts_with("    Paren #1 @1:11-3:2\n"));
+    }
+
+    #[test]
+    fn unclosed_parentheses_point_at_the_opening_one() {
+        let parsed = parse("const X = (a");
+        assert_eq!(parsed.codes, ["P2008"]);
+        assert_eq!(
+            parsed.messages,
+            ["expected `)` to close `(`, found end of file"]
+        );
+        for (text, message) in [
+            ("const X = (", "expected expression, found end of file"),
+            ("const X = ()", "expected expression, found `)`"),
+        ] {
+            assert_eq!(parse(text).messages, [message], "{text}");
+        }
     }
 
     #[test]

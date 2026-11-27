@@ -127,6 +127,8 @@ define_codes! {
     MISSING_INITIALIZER = 2006, "declaration without an initializer";
     /// A token that cannot start a type where one is required.
     EXPECTED_TYPE = 2007, "expected type";
+    /// An opening delimiter whose closing delimiter is missing.
+    UNCLOSED_DELIMITER = 2008, "unclosed delimiter";
 }
 
 #[cfg(test)]
