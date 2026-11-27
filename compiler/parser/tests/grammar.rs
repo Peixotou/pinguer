@@ -1679,3 +1679,72 @@ mod error_node_spans {
         );
     }
 }
+
+/// Every pair of adjacent operators, against the table of
+/// OPERATORS.md §1 rather than the parser's own levels.
+mod precedence_pairs {
+    use super::*;
+    use std::cmp::Ordering;
+
+    /// The binary operators of v0.1 and their levels in OPERATORS.md §1,
+    /// where a smaller level binds more tightly.
+    const OPERATORS: [(&str, u8); 18] = [
+        ("*", 5),
+        ("/", 5),
+        ("%", 5),
+        ("+", 6),
+        ("-", 6),
+        ("<<", 7),
+        (">>", 7),
+        ("&", 8),
+        ("^", 9),
+        ("|", 10),
+        ("==", 13),
+        ("!=", 13),
+        ("<", 13),
+        ("<=", 13),
+        (">", 13),
+        (">=", 13),
+        ("&&", 14),
+        ("||", 15),
+    ];
+
+    /// The level of the comparisons, which are non-associative.
+    const COMPARISON: u8 = 13;
+
+    #[test]
+    fn every_pair_of_binary_operators_groups_by_precedence() {
+        for (first, a) in OPERATORS {
+            for (second, b) in OPERATORS {
+                let text = format!("x {first} y {second} z");
+                if a == COMPARISON && b == COMPARISON {
+                    let parsed = parse(&format!("const C = {text}"));
+                    assert_eq!(parsed.codes, ["P2009"], "{text}");
+                    continue;
+                }
+                let expected = match a.cmp(&b) {
+                    // Left-associative: one chain.
+                    Ordering::Equal => format!("(x {first} y {second} z)"),
+                    Ordering::Less => format!("((x {first} y) {second} z)"),
+                    Ordering::Greater => format!("(x {first} (y {second} z))"),
+                };
+                assert_eq!(shape(&text), expected, "{text}");
+            }
+        }
+    }
+
+    #[test]
+    fn unary_conversion_and_postfix_operators_bind_more_tightly_than_binary_ones() {
+        for (op, _) in OPERATORS {
+            for (text, expected) in [
+                (format!("-x {op} y"), format!("((- x) {op} y)")),
+                (format!("x {op} !y"), format!("(x {op} (! y))")),
+                (format!("x as int {op} y"), format!("((as x int) {op} y)")),
+                (format!("x {op} y as int"), format!("(x {op} (as y int))")),
+                (format!("f() {op} a.b"), format!("((call f) {op} (. a b))")),
+            ] {
+                assert_eq!(shape(&text), expected, "{text}");
+            }
+        }
+    }
+}
