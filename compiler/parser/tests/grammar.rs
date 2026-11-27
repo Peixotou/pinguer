@@ -141,13 +141,13 @@ mod file {
 
     #[test]
     fn other_tokens_are_not_items() {
-        let parsed = parse("\nlet x = 1");
+        let parsed = parse("\nreturn 1");
         assert_eq!(parsed.codes, ["P2001"]);
         assert_eq!(
             parsed.messages,
-            ["expected `import`, `func` or `const`, found `let`"]
+            ["expected `import`, `func` or `const`, found `return`"]
         );
-        assert_eq!(parsed.labelled, ["let"]);
+        assert_eq!(parsed.labelled, ["return"]);
         let parsed = parse("main");
         assert_eq!(
             parsed.messages,
@@ -1577,5 +1577,53 @@ mod reserved_keyword {
         ] {
             assert_eq!(parse(text).codes, ["P2017"], "{text:?}");
         }
+    }
+}
+
+mod misplaced_declaration {
+    use super::*;
+
+    #[test]
+    fn local_bindings_are_not_items() {
+        for keyword in ["let", "var"] {
+            let parsed = parse(&format!("{keyword} x = 1\nconst Y = 2"));
+            assert_eq!(parsed.codes, ["P2018"], "{keyword}");
+            assert_eq!(
+                parsed.messages,
+                [format!(
+                    "`{keyword}` declarations are only allowed inside a function"
+                )]
+            );
+            assert_eq!(parsed.labelled, [keyword]);
+            assert!(parsed.tree.contains("Const #"), "{}", parsed.tree);
+        }
+    }
+
+    #[test]
+    fn functions_and_imports_are_not_statements() {
+        let text = "func f() {\n    import a\n    func g() {\n        h()\n    }\n    k()\n}";
+        let parsed = parse(text);
+        assert_eq!(parsed.codes, ["P2018", "P2018"]);
+        assert_eq!(
+            parsed.messages,
+            [
+                "`import` declarations are only allowed at the top level of a file",
+                "`func` declarations are only allowed at the top level of a file",
+            ]
+        );
+        // The nested function is skipped whole; `k()` is still parsed.
+        assert_eq!(
+            parsed.tree.matches("ExprStmt").count(),
+            1,
+            "{}",
+            parsed.tree
+        );
+    }
+
+    #[test]
+    fn a_missing_brace_is_reported_with_the_declaration_it_misplaces() {
+        let parsed = parse("func f() {\n    a()\n\nfunc g() {\n}\n");
+        assert_eq!(parsed.codes, ["P2018", "P2008"]);
+        assert_eq!(parsed.labelled, ["func", ""]);
     }
 }

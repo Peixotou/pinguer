@@ -178,6 +178,22 @@ impl Parser<'_> {
         )
     }
 
+    /// Reports the current token, a keyword that starts a declaration that
+    /// is allowed only where `allowed` says, such as "inside a function".
+    /// Recovery skips the declaration (ADR-0029).
+    fn misplaced_declaration(&mut self, allowed: &str, note: &str) -> Reported {
+        let found = self.cursor.current();
+        self.error(
+            Diagnostic::error(format!(
+                "{} declarations are only allowed {allowed}",
+                found.kind
+            ))
+            .with_code(codes::MISPLACED_DECLARATION)
+            .with_primary(found.span, "not allowed here")
+            .with_note(note),
+        )
+    }
+
     /// Reports `diagnostic`. Either way the caller recovers as from a
     /// reported error.
     ///

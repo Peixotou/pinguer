@@ -111,6 +111,11 @@ impl Parser<'_> {
             }
             // `}` ends the block instead.
             TokenKind::RParen | TokenKind::RBracket => Err(self.unexpected_closing_delimiter()),
+            // Skipping the declaration as a statement skips its body whole.
+            TokenKind::Keyword(Keyword::Func | Keyword::Import) => Err(self.misplaced_declaration(
+                "at the top level of a file",
+                "a `}` missing earlier in the file also puts a declaration inside a block",
+            )),
             _ => self.expr_stmt(),
         };
         ast::Stmt {

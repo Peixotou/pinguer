@@ -149,6 +149,9 @@ define_codes! {
     UNEXPECTED_CLOSING_DELIMITER = 2016, "closing delimiter without an opening one";
     /// A keyword reserved for a later version, such as `for` or `struct`.
     RESERVED_KEYWORD = 2017, "keyword reserved for a future version";
+    /// A declaration where it is not allowed, such as `func` inside a block
+    /// or `let` at the top level.
+    MISPLACED_DECLARATION = 2018, "declaration not allowed here";
 }
 
 #[cfg(test)]

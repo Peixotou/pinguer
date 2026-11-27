@@ -81,6 +81,10 @@ impl Parser<'_> {
             TokenKind::Keyword(Keyword::Const) => self
                 .binding(ast::BindingKind::Const)
                 .map(ast::ItemKind::Const),
+            TokenKind::Keyword(Keyword::Let | Keyword::Var) => Err(self.misplaced_declaration(
+                "inside a function",
+                "at the top level, only `import`, `func` and `const` declarations are allowed",
+            )),
             kind if crate::is_closing_delimiter(kind) => Err(self.unexpected_closing_delimiter()),
             _ => Err(self.expected_item()),
         };
