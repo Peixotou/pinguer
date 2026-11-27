@@ -53,8 +53,12 @@ server will reuse it ([COMPILER_ARCHITECTURE.md §3.6](../architecture/COMPILER_
   length of the chain.
 * Bindings (`let`, `var`, `const`) share one structure with a kind; the
   top-level `const` item uses the same structure.
-* A binary expression records the span of its operator, which type errors
-  point at.
+* Binary operators of one precedence level form one node: the first
+  operand and a list of operator-operand pairs, applied from left to right,
+  so `a - b + c` is one node meaning `(a - b) + c`. The tree's depth then
+  does not grow with the length of a chain ([ADR-0030](0030-parser-resource-limits.md)).
+  Each pair records the span of its operator, which type errors point
+  at.
 
 ### Literals
 

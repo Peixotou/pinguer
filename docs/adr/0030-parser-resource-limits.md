@@ -15,22 +15,29 @@ process has 1 MiB of stack; secondary threads elsewhere often have less.
 
 ## Decision
 
-* **Nesting limit: 256.** The parser counts the constructs it is currently
-  inside whose parsing recurses: parenthesized expressions, argument lists,
-  prefix operators and blocks (including the blocks of `if`, `while` and
-  functions). Opening the 257th is an error (a dedicated `P2xxx` code). The
-  parser then skips the offending construct, counting delimiters
-  iteratively without recursion, replaces it with an error node and
-  continues. 256 matches Clang's default limit on nested brackets; real
-  programs stay far below it.
+* **Depth limit: 256.** What must be bounded is the depth of the tree,
+  because every recursive pass and the destruction of the tree recurse once
+  per level of it, wherever the parser itself iterates. The parser counts
+  the levels of the tree it is building: blocks (including those of `if`,
+  `while` and functions), parenthesized expressions, prefix operators,
+  calls, member accesses, `as` conversions and operator chains. Going past
+  256 is an error (a dedicated `P2xxx` code); the parser skips the rest of
+  the offending construct, counting delimiters without recursion, replaces
+  it with an error node and continues. 256 matches Clang's default limit on
+  nested brackets; real programs stay far below it.
+* **Operator chains are one level.** Binary operators of one precedence
+  level form a single node with a list of operands
+  ([ADR-0028](0028-ast-representation.md)), so `a + b + … + z` adds one
+  level to the tree whatever its length, and `a + b * c - d` adds two.
+  Long sums and long `&&`/`||` conditions therefore need no limit, while a
+  binary tree would be as deep as the chain is long.
 * **Stack guarantee.** Parsing a construct nested at the limit, rendering the
   resulting tree and dropping it must succeed on a thread with 1 MiB of stack
   in an unoptimized build. A test checks this.
-* **Everything else is iterative.** Sequences of items, statements,
-  arguments, member accesses and left-associative binary operators are
-  parsed by loops and have no limit beyond the file size. `else if` chains
-  are a list in the tree ([ADR-0028](0028-ast-representation.md)), not a
-  nesting.
+* **Lists are unlimited.** Items, statements, parameters and arguments are
+  lists in the tree and are parsed by loops; `else if` chains are a list as
+  well ([ADR-0028](0028-ast-representation.md)). They have no limit beyond
+  the file size.
 * **Node IDs.** IDs are `u32`. Allocation is checked; if a file ever needed
   more IDs than exist, the parser reports a resource-limit error and stops
   instead of reusing or wrapping IDs.
@@ -40,6 +47,13 @@ process has 1 MiB of stack; secondary threads elsewhere often have less.
 * **Memory.** The tree is linear in the number of tokens; the parser keeps
   no other structure that grows with the input apart from the filtered token
   vector.
+
+Measurements on Windows with an unoptimized build and a 1 MiB thread,
+before this limit existed: a left-deep tree of 2,000 binary operators could
+be numbered and dropped but not rendered, 4,000 could not be dropped, and
+fewer than 500 nested parentheses already exhausted the stack while
+parsing. The limit of 256 keeps every pass within that stack with a
+margin, which the stack guarantee test checks.
 
 ## Alternatives considered
 
@@ -51,6 +65,11 @@ process has 1 MiB of stack; secondary threads elsewhere often have less.
   nested arithmetic can legitimately exceed it.
 * **Separate limits per construct:** more knobs without a clear benefit; one
   limit bounds the recursion depth of every pass.
+* **Counting chain length towards the limit, with binary nodes:** a sum of
+  more than 256 terms, plausible in generated code, would be rejected.
+* **Iterative destruction and traversal everywhere:** possible for the
+  parser's own passes, but every later phase would have to avoid recursion
+  over expressions.
 
 ## Consequences
 
