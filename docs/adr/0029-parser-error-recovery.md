@@ -26,12 +26,15 @@ risks never terminating on unexpected input.
   reported together (see **Delimiters**).
 * `Unknown` tokens were reported by the lexer
   ([LEXICAL_STRUCTURE.md §7](../../specifications/LEXICAL_STRUCTURE.md#7-error-recovery)).
-  Where an operand is expected, one becomes an error expression; elsewhere
-  recovery skips it. The parser never blames an `Unknown` token, nor reports
-  what it expected at the token directly after one on the same line,
-  because the character may be what belonged there. Problems that do not
-  depend on it are still reported: a reserved keyword, or a delimiter left
-  open at a `}` or the end of the file.
+  Where an operand is expected, one becomes an error expression and parsing
+  continues; anywhere else, as in place of a name, a type or a separator,
+  the construct is abandoned as after any other error and recovery skips
+  the token, so what that construct still lacks is not reported. The parser
+  never blames an `Unknown` token, nor reports what it expected at the
+  token directly after one on the same line, because the character may be
+  what belonged there. Problems that do not depend on it are still reported
+  where parsing reaches them: a reserved keyword, or, after an unknown
+  operand, a delimiter left open at a `}` or the end of the file.
 * Invalid syntax is never accepted silently: every error node in the tree
   corresponds to a reported diagnostic.
 
