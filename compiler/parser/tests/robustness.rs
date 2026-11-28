@@ -422,6 +422,25 @@ fn an_unknown_character_before_any_token_is_reported_once() {
     }
 }
 
+/// Expression statements that are not calls, nested in blocks and cut off
+/// at every character, so that the diagnostic about the statement and the
+/// delimiters left open at the end of the file meet at one token.
+#[test]
+fn truncated_invalid_statements_uphold_invariants() {
+    for seed in 1..=150u64 {
+        let mut generator = Generator {
+            rng: Rng::new(seed, 0xBB67_AE85_84CA_A73B),
+        };
+        let operator = generator.rng.pick(&["-", "!", "~", "a + ", "x as int * "]);
+        let call = format!("{}({})", generator.name(), generator.expr(2));
+        let text = format!("func f() {{\n    if x {{\n        {operator}{call}\n    }}\n}}\n");
+        for end in (0..=text.len()).filter(|&end| text.is_char_boundary(end)) {
+            let cut = &text[..end];
+            check(cut, &|| format!("seed {seed}: {cut:?}"));
+        }
+    }
+}
+
 #[test]
 fn generated_programs_parse_without_diagnostics() {
     for seed in 1..=2_000u64 {
