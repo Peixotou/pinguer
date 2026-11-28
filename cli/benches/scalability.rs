@@ -48,9 +48,10 @@ const SIZES: [usize; 8] = [
 
 /// Input shapes: a prefix, then a unit repeated up to the requested size.
 /// The first five were chosen for the lexer; at the top level, `let` is a
-/// misplaced declaration, so the parser recovers on every line of
-/// `many_valid_lines`. The last three are valid programs, or nearly: the
-/// body of `many_statements` is not closed.
+/// misplaced declaration, reported once, after which recovery skips to the
+/// next item, so all of `many_valid_lines` becomes one error item. The last
+/// three are valid programs, or nearly: the body of `many_statements` is
+/// not closed.
 const SHAPES: [(&str, &str, &str); 8] = [
     ("long_valid_line", "", "let x = y + 1 "),
     ("long_invalid_line", "", "$"),
