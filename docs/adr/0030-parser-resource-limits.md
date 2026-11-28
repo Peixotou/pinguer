@@ -56,28 +56,17 @@ process has 1 MiB of stack; secondary threads elsewhere often have less.
   no other structure that grows with the input apart from the filtered token
   vector.
 
-Measurements on Windows with an unoptimized build and a 1 MiB thread,
-before this limit existed: a left-deep tree of 2,000 binary operators could
-be numbered and dropped but not rendered, 4,000 could not be dropped, and
-fewer than 500 nested parentheses already exhausted the stack while
-parsing.
-
 An unoptimized build gives every temporary of a function its own stack
 slot, so code that only runs on errors, or after the recursive call
 returns, still enlarges every recursive frame. The recursive functions
 therefore leave diagnostics, node construction and non-recursive cases to
-helpers. Measured on the same thread by the smallest stack that parses,
-renders and drops each construct, the stack used per level of nesting fell
-from 7.0 KiB to under 2 KiB for parentheses, from 3.2 KiB to 1.6 KiB for
-blocks and from 4.5 KiB to 2.9 KiB for `if` statements. The smaller nodes
-of ADR-0028 reduced the frames further: 255 levels now need about
-640 KiB of the 1 MiB for the deepest cases, nested `if` statements and
-nested call arguments (`f(f(…))`), 515 KiB for `while` statements,
-390 KiB for parentheses, 325 KiB for blocks and 260 KiB for chains of
-calls (`f()()`) and prefix operators. Windows rounds thread stacks to
-64 KiB, so the figures are accurate to that step. The stack guarantee
-test covers every kind of construct, these included, and fails if a
-change removes the margin.
+helpers.
+
+The stack guarantee is what is measured: a test parses, renders and drops
+every kind of construct, and a mix of them, nested to the limit on a
+thread with 1 MiB of stack, in the unoptimized build that tests use. A
+change that makes any of them exhaust that stack fails it. How much of the
+1 MiB is left is not measured.
 
 ## Alternatives considered
 
