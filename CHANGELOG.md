@@ -40,7 +40,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   the heap bytes and allocations per node of the syntax tree.
 - `pinguer_ast`, the syntax tree with node IDs and spans, and its
   deterministic text rendering. Its layout keeps the heap at 62–75 bytes
-  and 1.0 allocation per node on the benchmark's 10 MB inputs (ADR-0028).
+  and 1.0 allocation per node on the benchmark's 10 MB inputs that parse
+  into trees (ADR-0028).
 - `pinguer_parser`, a parser for the complete v0.1 grammar: precedence
   climbing with one node per operator chain, literal decoding, the layout
   rules for `{` and `else`, error recovery at statement and item
