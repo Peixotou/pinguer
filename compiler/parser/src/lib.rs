@@ -143,6 +143,11 @@ impl Unclosed {
         }
     }
 
+    /// The token at which the delimiters are closed.
+    fn span(&self) -> Span {
+        self.diagnostic.labels[0].span
+    }
+
     fn finish(self) -> Diagnostic {
         let Self {
             mut diagnostic,
@@ -319,12 +324,13 @@ impl Parser<'_> {
     ///   diagnostic that LEXICAL_STRUCTURE.md §5.2 requires replaces the one
     ///   about what was expected.
     ///
-    /// A diagnostic that blames the same span as the previous one is not
-    /// reported either: it is a consequence of the first, as when the
-    /// construct completed at a `}` (see [`Parser::expect_closing`]) still
-    /// lacks something there. Unclosed delimiters closed at the same token
-    /// are the exception: each names a different opening delimiter, and
-    /// they are reported together (see [`Unclosed`]).
+    /// A diagnostic that blames the same span as the previous one, or as the
+    /// unclosed delimiters still being collected, is not reported either:
+    /// it is a consequence of the first, as when the construct completed at
+    /// a `}` (see [`Parser::expect_closing`]) still lacks something there.
+    /// Unclosed delimiters closed at the same token are the exception: each
+    /// names a different opening delimiter, and they are reported together
+    /// (see [`Unclosed`]).
     ///
     /// Diagnostics about what was expected go through [`Parser::expected`].
     fn error(&mut self, diagnostic: Diagnostic) -> Reported {
@@ -347,13 +353,23 @@ impl Parser<'_> {
             _ => diagnostic,
         };
         let unclosed = diagnostic.code == Some(codes::UNCLOSED_DELIMITER);
-        if primary.is_some() && primary == self.last_error {
+        let group = self.unclosed.as_ref().map(Unclosed::span);
+        if primary.is_some() && (primary == self.last_error || primary == group) {
             if unclosed && let Some(group) = &mut self.unclosed {
                 group.join(diagnostic);
             }
             return Reported;
         }
-        self.flush_unclosed();
+        // A diagnostic about the code before the group's token, such as an
+        // expression statement completed there, precedes the group; any
+        // other diagnostic ends it.
+        let precedes_group = matches!(
+            (primary, group),
+            (Some(primary), Some(group)) if primary.start < group.start
+        );
+        if unclosed || !precedes_group {
+            self.flush_unclosed();
+        }
         self.last_error = primary;
         if unclosed {
             self.unclosed = Some(Unclosed {

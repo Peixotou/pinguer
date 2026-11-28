@@ -52,8 +52,11 @@ risks never terminating on unexpected input.
   token, such as the blocks still open at the end of the file, are one
   diagnostic: the innermost is reported as usual, and the enclosing ones
   are further secondary labels, at most eight secondary labels in all,
-  with a note that counts the delimiters and the ones not marked. A closing delimiter without an opening
-  one is reported and skipped.
+  with a note that counts the delimiters and the ones not marked. This
+  holds also when a diagnostic about the code before that token, such as an
+  expression statement completed there, is reported in between; it precedes
+  the group. A closing delimiter without an opening one is reported and
+  skipped.
 * **Missing tokens.** When a token is missing but the construct can be
   completed (for example a `)` missing at the end of an argument list), the
   parser reports it and continues as if it had been there, instead of

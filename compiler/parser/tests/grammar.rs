@@ -1906,6 +1906,27 @@ mod one_diagnostic_per_problem {
     }
 
     #[test]
+    fn an_error_between_delimiters_closed_at_the_same_token_keeps_them_together() {
+        // The statement, completed at the end of the file, is not a call.
+        for (text, delimiters) in [
+            ("func f() {\n    -g(", 2),
+            ("func f() {\n    if x {\n        a + g(", 3),
+        ] {
+            let reported = diagnostics(text);
+            let codes: Vec<String> = reported
+                .iter()
+                .map(|d| d.code.unwrap().to_string())
+                .collect();
+            assert_eq!(codes, ["P2012", "P2008"], "{text:?}");
+            assert_eq!(
+                reported[1].notes,
+                [format!("{delimiters} delimiters are not closed")],
+                "{text:?}"
+            );
+        }
+    }
+
+    #[test]
     fn unclosed_delimiters_at_different_tokens_are_reported_separately() {
         let reported = diagnostics("func f() {\n    g(a\n}\nfunc h() {\n    k(b\n}");
         assert_eq!(reported.len(), 2);
