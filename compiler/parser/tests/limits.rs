@@ -121,6 +121,42 @@ fn levels_add_up_across_kinds_of_construct() {
     assert_eq!(codes, ["P2019"]);
 }
 
+/// A function nested `levels` deep that mixes the kinds of construct: its
+/// body, then blocks, `if` and `while` statements in turn, then a call
+/// whose argument nests parentheses, prefix operators and calls in turn.
+fn mixed(levels: usize) -> String {
+    const STATEMENTS: [(&str, &str); 3] =
+        [("if x {\n", "}\n"), ("while x {\n", "}\n"), ("{\n", "}\n")];
+    const EXPRESSIONS: [(&str, &str); 3] = [("(", ")"), ("-", ""), ("f(", ")")];
+    let statements = levels / 2;
+    let mut open = String::from("func f() {\n");
+    let mut close = vec!["}"];
+    for (open_kind, close_kind) in STATEMENTS.iter().cycle().take(statements - 1) {
+        open.push_str(open_kind);
+        close.push(close_kind);
+    }
+    open.push_str("g(");
+    close.push(")\n");
+    for (open_kind, close_kind) in EXPRESSIONS.iter().cycle().take(levels - statements - 1) {
+        open.push_str(open_kind);
+        close.push(close_kind);
+    }
+    close.reverse();
+    format!("{open}1{}", close.concat())
+}
+
+#[test]
+fn mixed_constructs_count_towards_one_limit() {
+    let limit = MAX_NESTING as usize;
+    let (codes, _) = diagnose(&mixed(limit));
+    assert!(codes.is_empty(), "{codes:?}");
+    // Level 257 is the 128th construct in the argument, a prefix operator.
+    let (codes, labels) = diagnose(&mixed(limit + 1));
+    assert_eq!(codes, ["P2019"]);
+    assert_eq!(labels, ["-"]);
+    assert!(tree_depth(&mixed(limit)) <= 3 * limit + 4);
+}
+
 #[test]
 fn the_limit_is_reported_once_and_parsing_continues() {
     let deep = format!("const X = {}1{}", "(".repeat(300), ")".repeat(300));
@@ -175,6 +211,8 @@ fn nesting_at_the_limit_fits_in_one_mebibyte_of_stack() {
             let codes = parse_render_drop(&nested(kind, MAX_NESTING as usize));
             assert!(codes.is_empty(), "{kind}: {codes:?}");
         }
+        let codes = parse_render_drop(&mixed(MAX_NESTING as usize));
+        assert!(codes.is_empty(), "mixed: {codes:?}");
     });
 }
 
