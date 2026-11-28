@@ -20,6 +20,12 @@
 //! phase grows by about 2x. Nothing is asserted, because timings depend on
 //! the machine: this is a measurement tool, and the deterministic properties
 //! are tested in `cli/tests/scalability.rs`.
+//!
+//! For the syntax tree it also prints the bytes per node and allocations per
+//! node of its heap: every `Box`, and every boxed slice or string that is
+//! not empty, is one allocation of exactly the size of its contents. They
+//! are counted by walking the tree, so they do not depend on the allocator,
+//! whose own overhead is not included.
 
 #![allow(clippy::print_stdout)] // Printing the measurements is the purpose.
 
@@ -27,6 +33,7 @@ use std::fmt::Write as _;
 use std::io::Write as _;
 use std::time::{Duration, Instant};
 
+use pinguer_ast as ast;
 use pinguer_diagnostics::{Diagnostics, human, json};
 use pinguer_lexer::tokenize;
 use pinguer_parser::parse;
@@ -107,6 +114,155 @@ impl std::fmt::Write for Sink {
     }
 }
 
+/// The heap of a syntax tree: the bytes it asks the allocator for and the
+/// number of allocations.
+#[derive(Default)]
+struct Heap {
+    bytes: usize,
+    allocations: usize,
+}
+
+impl Heap {
+    fn of(file: &ast::File) -> Self {
+        let mut heap = Heap::default();
+        heap.list::<ast::Item>(file.items.len());
+        for item in &file.items {
+            heap.item(item);
+        }
+        heap
+    }
+
+    /// Counts an allocation of `count` values of type `T`, if it is one.
+    fn list<T>(&mut self, count: usize) {
+        if count > 0 {
+            self.bytes += count * size_of::<T>();
+            self.allocations += 1;
+        }
+    }
+
+    fn ident(&mut self, ident: &ast::Ident) {
+        self.list::<u8>(ident.name.len());
+    }
+
+    fn item(&mut self, item: &ast::Item) {
+        match &item.kind {
+            ast::ItemKind::Import(import) => {
+                self.list::<ast::Ident>(import.path.len());
+                for name in &import.path {
+                    self.ident(name);
+                }
+            }
+            ast::ItemKind::Func(func) => {
+                self.ident(&func.name);
+                self.list::<ast::Param>(func.params.len());
+                for param in &func.params {
+                    self.ident(&param.name);
+                    self.ty(&param.ty);
+                }
+                if let Some(ret) = &func.ret {
+                    self.ty(ret);
+                }
+                self.block(&func.body);
+            }
+            ast::ItemKind::Const(binding) => self.binding(binding),
+            ast::ItemKind::Error => {}
+        }
+    }
+
+    fn ty(&mut self, ty: &ast::Type) {
+        match &ty.kind {
+            ast::TypeKind::Name(name) => self.ident(name),
+            ast::TypeKind::Unit => {}
+        }
+    }
+
+    fn binding(&mut self, binding: &ast::Binding) {
+        self.ident(&binding.name);
+        if let Some(ty) = &binding.ty {
+            self.list::<ast::Type>(1);
+            self.ty(ty);
+        }
+        self.expr(&binding.value);
+    }
+
+    fn block(&mut self, block: &ast::Block) {
+        self.list::<ast::Stmt>(block.stmts.len());
+        for stmt in &block.stmts {
+            self.stmt(stmt);
+        }
+    }
+
+    fn stmt(&mut self, stmt: &ast::Stmt) {
+        match &stmt.kind {
+            ast::StmtKind::Binding(binding) => self.binding(binding),
+            ast::StmtKind::Assign { target, value, .. } => {
+                self.ident(target);
+                self.expr(value);
+            }
+            ast::StmtKind::If(if_stmt) => {
+                self.list::<ast::IfBranch>(if_stmt.branches.len());
+                for branch in &if_stmt.branches {
+                    self.expr(&branch.cond);
+                    self.block(&branch.block);
+                }
+                if let Some(block) = &if_stmt.else_block {
+                    self.block(block);
+                }
+            }
+            ast::StmtKind::While { cond, body } => {
+                self.expr(cond);
+                self.block(body);
+            }
+            ast::StmtKind::Expr(expr) | ast::StmtKind::Return(Some(expr)) => self.expr(expr),
+            ast::StmtKind::Block(block) => self.block(block),
+            ast::StmtKind::Return(None)
+            | ast::StmtKind::Break
+            | ast::StmtKind::Continue
+            | ast::StmtKind::Error => {}
+        }
+    }
+
+    fn boxed(&mut self, expr: &ast::Expr) {
+        self.list::<ast::Expr>(1);
+        self.expr(expr);
+    }
+
+    fn expr(&mut self, expr: &ast::Expr) {
+        match &expr.kind {
+            ast::ExprKind::Literal(ast::Literal::Float(text) | ast::Literal::String(text)) => {
+                self.list::<u8>(text.len());
+            }
+            ast::ExprKind::Literal(_) | ast::ExprKind::Error => {}
+            ast::ExprKind::Name(name) => self.ident(name),
+            ast::ExprKind::Paren(inner) => self.boxed(inner),
+            ast::ExprKind::Unary { operand, .. } => self.boxed(operand),
+            ast::ExprKind::Binary { first, rest } => {
+                self.boxed(first);
+                self.list::<ast::BinaryOperand>(rest.len());
+                for pair in rest {
+                    self.expr(&pair.operand);
+                }
+            }
+            ast::ExprKind::Cast { operand, ty } => {
+                self.boxed(operand);
+                self.list::<ast::Type>(1);
+                self.ty(ty);
+            }
+            ast::ExprKind::Call { callee, args } => {
+                self.boxed(callee);
+                self.list::<ast::Expr>(args.len());
+                for arg in args {
+                    self.expr(arg);
+                }
+            }
+            ast::ExprKind::Member { base, name } => {
+                self.boxed(base);
+                self.ident(name);
+            }
+        }
+    }
+}
+
 /// Runs `f` on a fresh value from `setup` `runs` times, timing only `f`,
 /// and returns the fastest duration and the last result.
 fn fastest_with<S, T>(
@@ -131,8 +287,20 @@ struct Measurement {
     phases: [Duration; 10],
     tokens: usize,
     nodes: u32,
+    heap: Heap,
     errors: usize,
     rendered_bytes: usize,
+}
+
+impl Measurement {
+    /// Heap bytes and allocations of the syntax tree per node.
+    fn per_node(&self) -> (f64, f64) {
+        let nodes = f64::from(self.nodes.max(1));
+        (
+            self.heap.bytes as f64 / nodes,
+            self.heap.allocations as f64 / nodes,
+        )
+    }
 }
 
 fn measure(prefix: &str, unit: &str, size: usize, path: &std::path::Path) -> Measurement {
@@ -173,6 +341,7 @@ fn measure(prefix: &str, unit: &str, size: usize, path: &std::path::Path) -> Mea
         sink.0
     });
     let nodes = tree.node_count;
+    let heap = Heap::of(&tree);
     drop(tree);
     let (drop_time, ()) = fastest_with(
         runs,
@@ -213,6 +382,7 @@ fn measure(prefix: &str, unit: &str, size: usize, path: &std::path::Path) -> Mea
         ],
         tokens: tokens.len(),
         nodes,
+        heap,
         errors: diagnostics.error_count(),
         rendered_bytes,
     }
@@ -232,8 +402,8 @@ fn main() {
         }
         let _ = write!(
             header,
-            " {:>10} {:>10} {:>10} {:>10}",
-            "tokens", "nodes", "errors", "rendered"
+            " {:>10} {:>10} {:>10} {:>10} {:>10} {:>10}",
+            "tokens", "nodes", "B/node", "allocs/n", "errors", "rendered"
         );
         println!("{header}");
         let mut results = Vec::new();
@@ -243,9 +413,10 @@ fn main() {
             for phase in m.phases {
                 let _ = write!(row, " {:>10.3}", milliseconds(phase));
             }
+            let (bytes, allocations) = m.per_node();
             let _ = write!(
                 row,
-                " {:>10} {:>10} {:>10} {:>10}",
+                " {:>10} {:>10} {bytes:>10.1} {allocations:>10.2} {:>10} {:>10}",
                 m.tokens, m.nodes, m.errors, m.rendered_bytes
             );
             println!("{row}");
@@ -265,4 +436,5 @@ fn main() {
     }
     let _ = std::fs::remove_file(&path);
     println!("\ntimes in milliseconds, fastest of 5 runs (3 above 1 MB)");
+    println!("B/node, allocs/n: heap bytes and allocations of the syntax tree per node");
 }
