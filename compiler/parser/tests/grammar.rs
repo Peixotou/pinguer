@@ -1565,6 +1565,29 @@ mod unknown_token_recovery {
     }
 
     #[test]
+    fn an_unclosed_parenthesis_found_on_a_later_line_is_reported() {
+        // Inside `(` the lexer produces no line breaks: the next line's
+        // first token directly follows the unknown character.
+        for (text, found) in [
+            ("const X = (1 + $\nfunc g() {\n}", "`func`"),
+            ("func f() {\n    g(1 +\u{A0}\n    let y = 2\n}", "`let`"),
+        ] {
+            let parsed = parse(text);
+            assert_eq!(
+                parsed.codes,
+                ["P1001", "P2008"],
+                "{text:?}: {:?}",
+                parsed.messages
+            );
+            assert_eq!(
+                parsed.messages[1],
+                format!("expected `)` to close `(`, found {found}"),
+                "{text:?}"
+            );
+        }
+    }
+
+    #[test]
     fn problems_that_do_not_depend_on_the_unknown_token_are_reported() {
         for (text, codes) in [
             // The `(` and the `{` are not closed, whatever `$` was meant to be.

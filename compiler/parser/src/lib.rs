@@ -384,19 +384,38 @@ impl Parser<'_> {
 
     /// Reports `diagnostic`, which says what the parser expected at the
     /// current token, like [`Parser::error`], unless the token directly
-    /// follows an [`TokenKind::Unknown`] token. The lexer has reported that
-    /// character, which may be what belonged there, so the mismatch is a
-    /// consequence of it (ADR-0029). A reserved keyword is reported even
-    /// then: the problem is the keyword itself.
+    /// follows an [`TokenKind::Unknown`] token on the same line. The lexer
+    /// has reported that character, which may be what belonged there, so
+    /// the mismatch is a consequence of it (ADR-0029). A reserved keyword
+    /// is reported even then: the problem is the keyword itself. On a later
+    /// line, as inside an unclosed `(`, the token is not one the character
+    /// could have replaced.
     fn expected(&mut self, diagnostic: Diagnostic) -> Reported {
         let reserved = matches!(
             self.cursor.kind(),
             TokenKind::Keyword(keyword) if keyword.is_reserved_for_future_use()
         );
-        if self.cursor.follows_unknown() && !reserved {
+        if self.cursor.follows_unknown() && !self.starts_line() && !reserved {
             return Reported;
         }
         self.error(diagnostic)
+    }
+
+    /// Returns `true` if the current token is the first token of the file,
+    /// or a line break separates it from the token before it.
+    ///
+    /// Besides a `NEWLINE` token, the source text between the two tokens is
+    /// consulted, because the lexer produces no `NEWLINE` inside an
+    /// unclosed `(` or `[` and the parser removes the ones it ignores. That
+    /// text holds only whitespace and comments, so a line break in a block
+    /// comment counts, as LEXICAL_STRUCTURE.md §6 says.
+    fn starts_line(&self) -> bool {
+        let Some(previous) = self.cursor.previous() else {
+            return true;
+        };
+        let start = self.cursor.current().span.start as usize;
+        previous.kind == TokenKind::Newline
+            || self.text[previous.span.end as usize..start].contains('\n')
     }
 
     /// Reports the unclosed delimiters collected so far.
