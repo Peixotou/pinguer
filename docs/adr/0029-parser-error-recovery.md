@@ -25,8 +25,13 @@ risks never terminating on unexpected input.
   dropped, except that unclosed delimiters closed at the same token are
   reported together (see **Delimiters**).
 * `Unknown` tokens were reported by the lexer
-  ([LEXICAL_STRUCTURE.md §7](../../specifications/LEXICAL_STRUCTURE.md#7-error-recovery))
-  and are skipped without a diagnostic.
+  ([LEXICAL_STRUCTURE.md §7](../../specifications/LEXICAL_STRUCTURE.md#7-error-recovery)).
+  Where an operand is expected, one becomes an error expression; elsewhere
+  recovery skips it. The parser never blames an `Unknown` token, nor reports
+  what it expected at the token directly after one, because the character
+  may be what belonged there. Problems that do not depend on it are still
+  reported: a reserved keyword, or a delimiter left open at a `}` or the end
+  of the file.
 * Invalid syntax is never accepted silently: every error node in the tree
   corresponds to a reported diagnostic.
 

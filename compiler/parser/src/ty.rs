@@ -26,7 +26,7 @@ impl Parser<'_> {
             }
             _ => {
                 let found = self.cursor.current();
-                return Err(self.error(
+                return Err(self.expected(
                     Diagnostic::error(format!("expected type, found {}", self.describe(found)))
                         .with_code(codes::EXPECTED_TYPE)
                         .with_primary(found.span, "expected a type"),

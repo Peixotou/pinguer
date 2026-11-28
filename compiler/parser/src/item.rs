@@ -110,7 +110,7 @@ impl Parser<'_> {
 
     fn expected_item(&mut self) -> Reported {
         let found = self.cursor.current();
-        self.error(
+        self.expected(
             Diagnostic::error(format!(
                 "expected `import`, `func` or `const`, found {}",
                 self.describe(found)
@@ -178,7 +178,7 @@ impl Parser<'_> {
         let name = self.ident()?;
         if !self.cursor.at(TokenKind::Colon) {
             let found = self.cursor.current();
-            return Err(self.error(
+            return Err(self.expected(
                 Diagnostic::error(format!(
                     "expected `:` and the parameter's type, found {}",
                     self.describe(found)

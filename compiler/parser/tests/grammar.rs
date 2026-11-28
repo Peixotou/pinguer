@@ -1493,6 +1493,51 @@ mod unknown_token_recovery {
         let parsed = parse("func f() {\n    -x $\n}");
         assert_eq!(parsed.codes, ["P1001", "P2012"]);
     }
+
+    #[test]
+    fn what_was_expected_after_an_unknown_token_is_not_reported() {
+        // The character may be what belonged there: a space, a quote, an
+        // operator or a delimiter.
+        for text in [
+            "func f() {\n    let a = b +\u{A0}c\n}",
+            "func f() {\n    g(a,\u{A0}b)\n}",
+            "func f() {\n    let a = $x\n}",
+            "func f() {\n    $x = 1\n}",
+            "func f() {\n    return \u{201C}x\n}",
+            "func f() {\n    if $ x {\n    }\n}",
+            "func f() {\n    x = $ 1 2\n}",
+            "const X = $ 2\nconst Y = 3",
+            "import std.$ io",
+        ] {
+            let parsed = parse(text);
+            assert_eq!(parsed.codes, ["P1001"], "{text:?}: {:?}", parsed.messages);
+        }
+    }
+
+    #[test]
+    fn the_construct_around_an_unknown_operand_is_kept() {
+        let parsed = parse("func f() {\n    let a = b +\u{A0}c\n}");
+        assert!(parsed.tree.contains("Let #"), "{}", parsed.tree);
+        assert!(parsed.tree.contains("ErrorExpr"), "{}", parsed.tree);
+    }
+
+    #[test]
+    fn problems_that_do_not_depend_on_the_unknown_token_are_reported() {
+        for (text, codes) in [
+            // The `(` and the `{` are not closed, whatever `$` was meant to be.
+            ("func f() {\n    g($", &["P1001", "P2008"][..]),
+            // The keyword is reserved wherever it appears.
+            ("func f() {\n    let a = $ struct\n}", &["P1001", "P2017"]),
+            // Unrelated errors on later lines.
+            (
+                "func f() {\n    let a = $x\n    let = 1\n}",
+                &["P1001", "P2002"],
+            ),
+        ] {
+            let parsed = parse(text);
+            assert_eq!(parsed.codes, codes, "{text:?}: {:?}", parsed.messages);
+        }
+    }
 }
 
 mod unexpected_closing_delimiter {

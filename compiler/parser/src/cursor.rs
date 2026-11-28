@@ -76,6 +76,12 @@ impl Cursor {
     pub(crate) fn prev_end(&self) -> u32 {
         self.prev_end
     }
+
+    /// Returns `true` if the token before the current one is an
+    /// [`TokenKind::Unknown`] token.
+    pub(crate) fn follows_unknown(&self) -> bool {
+        self.pos > 0 && self.tokens[self.pos - 1].kind == TokenKind::Unknown
+    }
 }
 
 #[cfg(test)]
@@ -108,6 +114,16 @@ mod tests {
         }
         assert!(c.at(TokenKind::Eof));
         assert_eq!(c.prev_end(), 4);
+    }
+
+    #[test]
+    fn knows_whether_an_unknown_token_precedes_the_current_one() {
+        let mut c = cursor("$ a b");
+        assert!(!c.follows_unknown());
+        c.bump();
+        assert!(c.follows_unknown());
+        c.bump();
+        assert!(!c.follows_unknown());
     }
 
     #[test]

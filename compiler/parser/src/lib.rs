@@ -185,7 +185,7 @@ impl Parser<'_> {
             })
         } else {
             let found = self.cursor.current();
-            Err(self.error(
+            Err(self.expected(
                 Diagnostic::error(format!(
                     "expected identifier, found {}",
                     self.describe(found)
@@ -202,7 +202,7 @@ impl Parser<'_> {
             return Ok(self.cursor.bump());
         }
         let found = self.cursor.current();
-        Err(self.error(
+        Err(self.expected(
             Diagnostic::error(format!("expected {kind}, found {}", self.describe(found)))
                 .with_code(codes::EXPECTED_TOKEN)
                 .with_primary(found.span, format!("expected {kind}")),
@@ -223,19 +223,22 @@ impl Parser<'_> {
             return Ok(());
         }
         let found = self.cursor.current();
-        let reported = self.error(
-            Diagnostic::error(format!(
-                "expected {close} to close {}, found {}",
-                open.kind,
-                self.describe(found)
-            ))
-            .with_code(codes::UNCLOSED_DELIMITER)
-            .with_primary(found.span, format!("expected {close}"))
-            .with_secondary(open.span, "unclosed delimiter"),
-        );
+        let diagnostic = Diagnostic::error(format!(
+            "expected {close} to close {}, found {}",
+            open.kind,
+            self.describe(found)
+        ))
+        .with_code(codes::UNCLOSED_DELIMITER)
+        .with_primary(found.span, format!("expected {close}"))
+        .with_secondary(open.span, "unclosed delimiter");
         match found.kind {
-            TokenKind::RBrace | TokenKind::Eof => Ok(()),
-            _ => Err(reported),
+            // The delimiter is missing whatever an unknown character before
+            // the `}` or the end of the file was meant to be.
+            TokenKind::RBrace | TokenKind::Eof => {
+                self.error(diagnostic);
+                Ok(())
+            }
+            _ => Err(self.expected(diagnostic)),
         }
     }
 
@@ -272,7 +275,7 @@ impl Parser<'_> {
                 "assignment is a statement, not an expression, so assignments cannot be chained",
             );
         }
-        self.error(diagnostic)
+        self.expected(diagnostic)
     }
 
     /// Reports the current token, a closing delimiter that no opening one
@@ -322,6 +325,8 @@ impl Parser<'_> {
     /// lacks something there. Unclosed delimiters closed at the same token
     /// are the exception: each names a different opening delimiter, and
     /// they are reported together (see [`Unclosed`]).
+    ///
+    /// Diagnostics about what was expected go through [`Parser::expected`].
     fn error(&mut self, diagnostic: Diagnostic) -> Reported {
         let current = self.cursor.current();
         let primary = diagnostic.main_label().map(|label| label.span);
@@ -359,6 +364,23 @@ impl Parser<'_> {
             self.diagnostics.push(diagnostic);
         }
         Reported
+    }
+
+    /// Reports `diagnostic`, which says what the parser expected at the
+    /// current token, like [`Parser::error`], unless the token directly
+    /// follows an [`TokenKind::Unknown`] token. The lexer has reported that
+    /// character, which may be what belonged there, so the mismatch is a
+    /// consequence of it (ADR-0029). A reserved keyword is reported even
+    /// then: the problem is the keyword itself.
+    fn expected(&mut self, diagnostic: Diagnostic) -> Reported {
+        let reserved = matches!(
+            self.cursor.kind(),
+            TokenKind::Keyword(keyword) if keyword.is_reserved_for_future_use()
+        );
+        if self.cursor.follows_unknown() && !reserved {
+            return Reported;
+        }
+        self.error(diagnostic)
     }
 
     /// Reports the unclosed delimiters collected so far.

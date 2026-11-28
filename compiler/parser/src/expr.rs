@@ -335,7 +335,7 @@ impl Parser<'_> {
             kind if planned_syntax(kind).is_some() => return Err(self.unsupported()),
             _ => {
                 let found = self.cursor.current();
-                return Err(self.error(
+                return Err(self.expected(
                     Diagnostic::error(format!(
                         "expected expression, found {}",
                         self.describe(found)
