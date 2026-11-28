@@ -5,7 +5,7 @@ use pinguer_diagnostics::{Diagnostic, codes};
 use pinguer_lexer::{Keyword, TokenKind};
 
 use crate::ids::PENDING;
-use crate::{PResult, Parser};
+use crate::{PResult, Parser, Reported};
 
 impl Parser<'_> {
     /// `Block = "{" , { Separator } , [ Statement , { Separator ,
@@ -255,8 +255,12 @@ impl Parser<'_> {
     }
 
     /// `Assignment = IDENT , AssignOp , Expr`, after the target has been
-    /// parsed as an expression. Only a name is a valid target in v0.1.
+    /// parsed as an expression. Only a name is a valid target in v0.1; an
+    /// error expression was reported where it was parsed.
     fn assignment(&mut self, target: ast::Expr, op: ast::AssignOp) -> PResult<ast::StmtKind> {
+        if target.kind == ast::ExprKind::Error {
+            return Err(Reported);
+        }
         let ast::ExprKind::Name(target) = target.kind else {
             return Err(self.error(
                 Diagnostic::error("invalid assignment target")

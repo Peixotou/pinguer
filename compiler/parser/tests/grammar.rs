@@ -1076,6 +1076,14 @@ mod assignment {
     }
 
     #[test]
+    fn a_target_the_lexer_rejected_is_reported_once() {
+        for (target, code) in [("$", "P1001"), ("0b2", "P1006"), ("'ab'", "P1008")] {
+            let parsed = parse(&format!("func f() {{ {target} = 1 }}"));
+            assert_eq!(parsed.codes, [code], "{target}: {:?}", parsed.messages);
+        }
+    }
+
+    #[test]
     fn assignments_are_statements_not_expressions() {
         let parsed = parse("func f() { x = y = 1 }");
         assert_eq!(parsed.codes, ["P2003"]);
