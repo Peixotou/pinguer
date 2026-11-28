@@ -50,7 +50,7 @@ impl Parser<'_> {
             match token.kind {
                 TokenKind::Eof => return end,
                 TokenKind::Keyword(Keyword::Func | Keyword::Import | Keyword::Const)
-                    if depth == 0 && self.starts_line(token) =>
+                    if depth == 0 && self.starts_line() =>
                 {
                     return end;
                 }
@@ -67,18 +67,21 @@ impl Parser<'_> {
         }
     }
 
-    /// Returns `true` if only spaces and tabs precede `token` on its line.
+    /// Returns `true` if the current token is the first token of the file,
+    /// or a line break separates it from the token before it.
     ///
-    /// The source text is consulted rather than `NEWLINE` tokens, because
-    /// inside an unclosed `(` or `[` the lexer produces none. The scan stops
-    /// at the first other character, so it reads only the whitespace
-    /// between `token` and the token before it.
-    fn starts_line(&self, token: Token) -> bool {
-        self.text[..token.span.start as usize]
-            .bytes()
-            .rev()
-            .find(|&byte| byte != b' ' && byte != b'\t')
-            .is_none_or(|byte| byte == b'\n')
+    /// Besides a `NEWLINE` token, the source text between the two tokens is
+    /// consulted, because the lexer produces no `NEWLINE` inside an
+    /// unclosed `(` or `[` and the parser removes the ones it ignores. That
+    /// text holds only whitespace and comments, so a line break in a block
+    /// comment counts, as LEXICAL_STRUCTURE.md §6 says.
+    fn starts_line(&self) -> bool {
+        let Some(previous) = self.cursor.previous() else {
+            return true;
+        };
+        let start = self.cursor.current().span.start as usize;
+        previous.kind == TokenKind::Newline
+            || self.text[previous.span.end as usize..start].contains('\n')
     }
 
     /// `Item = ImportDecl | FuncDecl | ConstDecl`

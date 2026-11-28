@@ -1468,6 +1468,22 @@ mod item_recovery {
     }
 
     #[test]
+    fn a_line_break_inside_a_comment_starts_a_line() {
+        for text in [
+            "const X = (\n/* a\n b */func g() {\n}",
+            "const X = (\r\n/* a\r\n b */func g() {\r\n}",
+            "const X = ( /* a */\n/* b */ func g() {\n}",
+            "const X = ( // a\nfunc g() {\n}",
+        ] {
+            let parsed = parse(text);
+            assert_eq!(names(&parsed.tree), ["g"], "{text:?}\n{}", parsed.tree);
+        }
+        // A comment without a line break does not.
+        let parsed = parse("const X = ( /* a */ func g() {\n}");
+        assert!(names(&parsed.tree).is_empty(), "{}", parsed.tree);
+    }
+
+    #[test]
     fn an_item_keyword_in_the_middle_of_a_line_does_not_end_recovery() {
         let parsed = parse("func f( import a\nimport b");
         assert_eq!(parsed.codes, ["P2002"]);

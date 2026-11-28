@@ -77,6 +77,11 @@ impl Cursor {
         self.prev_end
     }
 
+    /// Returns the token before the current one, if there is one.
+    pub(crate) fn previous(&self) -> Option<Token> {
+        self.pos.checked_sub(1).map(|index| self.tokens[index])
+    }
+
     /// Returns `true` if the token before the current one is an
     /// [`TokenKind::Unknown`] token.
     pub(crate) fn follows_unknown(&self) -> bool {
@@ -114,6 +119,15 @@ mod tests {
         }
         assert!(c.at(TokenKind::Eof));
         assert_eq!(c.prev_end(), 4);
+    }
+
+    #[test]
+    fn returns_the_token_before_the_current_one() {
+        let mut c = cursor("a b");
+        assert_eq!(c.previous(), None);
+        c.bump();
+        assert_eq!(c.previous().map(|token| token.kind), Some(TokenKind::Ident));
+        assert_eq!(c.previous().map(|token| token.span.range()), Some(0..1));
     }
 
     #[test]
