@@ -398,6 +398,30 @@ impl Generator {
     }
 }
 
+/// Characters that the lexer rejects, each as one `Unknown` token.
+const UNKNOWN: &[&str] = &["$", "#", "\u{A0}", "\u{201C}"];
+
+/// A character the lexer rejects, inserted before any token of a valid
+/// program, is the only problem reported: the parser blames neither it nor
+/// what follows it (ADR-0029).
+#[test]
+fn an_unknown_character_before_any_token_is_reported_once() {
+    for seed in 1..=400u64 {
+        let mut generator = Generator {
+            rng: Rng::new(seed, 0x6A09_E667_F3BC_C909),
+        };
+        let text = generator.program();
+        let mut map = SourceMap::new();
+        let file = map.add("t.pgr", &text).unwrap();
+        let tokens = pinguer_lexer::tokenize(file, &text, &mut Diagnostics::new());
+        let at = tokens[generator.rng.below(tokens.len())].span.start as usize;
+        let unknown = generator.rng.pick(UNKNOWN);
+        let edited = format!("{} {unknown} {}", &text[..at], &text[at..]);
+        let outcome = check(&edited, &|| format!("seed {seed}: {edited:?}"));
+        assert_eq!(outcome.codes, ["P1001"], "seed {seed}: {edited:?}");
+    }
+}
+
 #[test]
 fn generated_programs_parse_without_diagnostics() {
     for seed in 1..=2_000u64 {
