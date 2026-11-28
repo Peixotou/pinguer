@@ -21,26 +21,25 @@ server will reuse it ([COMPILER_ARCHITECTURE.md §3.6](../architecture/COMPILER_
   depth is bounded by [ADR-0030](0030-parser-resource-limits.md), so
   recursive construction, traversal and destruction are bounded too.
 * Lists are boxed slices because the tree is not modified after parsing: a
-  `Vec` keeps the capacity it grew to, at least four elements, which for
-  the many one-operand chains and short argument lists was most of the
-  memory of the tree. Measured with a counting allocator on 10 MB inputs,
-  boxed slices reduced the heap of the tree from 144–222 to 78–92 bytes
-  per node, at the cost of one shrinking reallocation per list.
-* Expressions are 64 bytes on 64-bit targets. An integer literal stores its
-  value as two `u64` halves (`IntValue`), because a `u128` field would align
-  every expression to 16 bytes, and a conversion boxes its target type,
-  which is rare. Together they reduced the tree by another 15–18% per node,
-  without more allocations in code without conversions. A test checks the
-  sizes.
-* Statements are 136 bytes. A binding boxes its type annotation, which local
-  bindings usually omit: per node, the tree of a realistic program without
-  annotations shrank by 12%, while one in which every binding is annotated
-  grew by 5%. Boxing the whole binding instead made statements smaller
-  still, but cost an allocation for every binding and enlarged programs
-  that declare variables, so it was not adopted.
-* Together, these layouts reduced the heap of the tree by 54–72% per node
-  on 10 MB inputs of five shapes, with 1.3–1.4 allocations per node
-  instead of 1.0, and made parsing faster.
+  `Vec` keeps the capacity it grew to, at least four elements, which the
+  many one-operand chains and short argument lists leave mostly unused. A
+  boxed slice costs one shrinking reallocation per list.
+* Expressions are at most 64 bytes on 64-bit targets. An integer literal
+  stores its value as two `u64` halves (`IntValue`), because a `u128` field
+  would align every expression to 16 bytes, and a conversion boxes its
+  target type, which is rare. A test checks the bound.
+* Statements are at most 136 bytes. A binding boxes its type annotation,
+  which local bindings usually omit, so a binding without one is smaller
+  and one with it costs an allocation. Boxing the whole binding instead
+  would cost an allocation for every binding.
+* The benchmark (`cargo bench -p pinguer_cli --bench scalability`) prints
+  the heap of the tree per node, counted by walking the finished tree: each
+  `Box`, and each boxed slice or string that is not empty, is one
+  allocation of exactly its contents' size. Allocator overhead and the
+  temporary allocations made while parsing are not counted. On its 10 MB
+  inputs that parse into trees, a long expression, many statements and many
+  functions, the tree holds 62–75 bytes and 1.0 allocation per node on a
+  64-bit target.
 * Node kinds are enums over the v0.1 constructs only: items (`import`,
   function, constant), statements, expressions and types. Each kind exists
   because the grammar has it; nothing is added for planned features.

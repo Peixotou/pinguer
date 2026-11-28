@@ -36,10 +36,11 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 - A limit of 100 reported diagnostics per invocation; further diagnostics
   are counted and summarized by a `P0004` note in both formats.
 - Scalability tests with inputs of up to 5 MB and a front-end benchmark
-  (`cargo bench -p pinguer_cli --bench scalability`).
+  (`cargo bench -p pinguer_cli --bench scalability`), which also reports
+  the heap bytes and allocations per node of the syntax tree.
 - `pinguer_ast`, the syntax tree with node IDs and spans, and its
   deterministic text rendering. Its layout keeps the heap at 62–75 bytes
-  per node on 10 MB inputs (ADR-0028).
+  and 1.0 allocation per node on the benchmark's 10 MB inputs (ADR-0028).
 - `pinguer_parser`, a parser for the complete v0.1 grammar: precedence
   climbing with one node per operator chain, literal decoding, the layout
   rules for `{` and `else`, error recovery at statement and item
