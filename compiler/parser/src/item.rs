@@ -161,7 +161,10 @@ impl Parser<'_> {
     /// `ParamList = Param , { "," , Param } , [ "," ]`.
     fn params(&mut self, open: Token) -> PResult<Vec<ast::Param>> {
         let mut params = Vec::new();
-        while !self.cursor.at(TokenKind::RParen) {
+        // Before a `}` or the end of the file, only the `)` is missing.
+        while !self.cursor.at(TokenKind::RParen)
+            && !crate::expr::at_block_end_or_eof(self.cursor.kind())
+        {
             params.push(self.param()?);
             if !self.cursor.at(TokenKind::Comma) {
                 break;

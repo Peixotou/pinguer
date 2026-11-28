@@ -914,6 +914,25 @@ mod func_decl {
             assert_eq!(parsed.messages, [message], "{text}");
         }
     }
+
+    #[test]
+    fn a_parameter_list_cut_off_reports_the_unclosed_parenthesis() {
+        for (text, found) in [
+            ("func f(", "end of file"),
+            ("func f(a: int,", "end of file"),
+            ("func f(a: int", "end of file"),
+            ("func f(\n}", "`}`"),
+            ("func f(a: int, }", "`}`"),
+        ] {
+            let parsed = parse(text);
+            assert_eq!(parsed.codes, ["P2008"], "{text:?}: {:?}", parsed.messages);
+            assert_eq!(
+                parsed.messages,
+                [format!("expected `)` to close `(`, found {found}")],
+                "{text:?}"
+            );
+        }
+    }
 }
 
 /// `Block = "{" , { Separator } , [ Statement , { Separator , { Separator } ,

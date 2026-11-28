@@ -369,8 +369,9 @@ mod precedence {
 }
 
 /// Returns `true` at a `}` or the end of the file, where an unclosed `(`
-/// is reported as such (ADR-0029) rather than as a missing expression.
-fn at_block_end_or_eof(kind: TokenKind) -> bool {
+/// is reported as such (ADR-0029) rather than as a missing expression or
+/// parameter.
+pub(crate) fn at_block_end_or_eof(kind: TokenKind) -> bool {
     matches!(kind, TokenKind::RBrace | TokenKind::Eof)
 }
 
